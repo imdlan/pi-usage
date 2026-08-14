@@ -1,0 +1,48 @@
+{
+  "name": "pi-usage",
+  "version": "0.1.0",
+  "description": "Pi Coding Agent extension to view usage and quota for multiple AI providers. Ships with Z.ai / GLM Coding Plan support; architected to extend to OpenAI, Anthropic, OpenRouter and more.",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "usage",
+    "quota",
+    "zai",
+    "glm",
+    "openai",
+    "anthropic",
+    "openrouter"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/imdlan/pi-usage",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/imdlan/pi-usage.git"
+  },
+  "bugs": {
+    "url": "https://github.com/imdlan/pi-usage/issues"
+  },
+  "main": "./src/index.ts",
+  "scripts": {
+    "test": "node --import tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}

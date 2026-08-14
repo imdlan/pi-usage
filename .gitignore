@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Logs
+*.log
+logs/
+
+# Local env / secrets — never commit credentials
+.env
+.env.*
+!.env.example
+
+# Test artifacts & recordings
+coverage/
+.nyc_output/
+test-recordings/
+*.har
+*.rec
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Pi / tooling local state (never commit)
+.oh-my-opencode-pi-*
+.pi/
+.aider*
