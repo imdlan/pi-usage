@@ -186,9 +186,25 @@ describe("formatStatus", () => {
       { id: "zai", name: "GLM", fetchedAt: 1747000000000, stale: false, hasError: false, cached: true },
     ];
     const out = formatStatus([snap()], info, 1747000000000, ctx);
-    assert.match(out, /Last refresh:/);
-    assert.match(out, /Status line:/);
-    assert.match(out, /GLM \(zai\): ok/);
+    const plain = stripAnsi(out);
+    assert.match(plain, /last refresh/);
+    assert.match(plain, /status line/);
+    assert.match(plain, /GLM \(zai\)\s*\|\s*ok/);
+  });
+
+  it("renders status as a bordered ASCII table", () => {
+    const info: CacheInfo[] = [
+      { id: "zai", name: "GLM", fetchedAt: 1747000000000, stale: false, hasError: false, cached: true },
+      { id: "openai", name: "OpenAI", fetchedAt: undefined, stale: false, hasError: true, cached: false },
+    ];
+    const out = stripAnsi(formatStatus([snap()], info, undefined, ctx, 90));
+    assert.match(out, /\+[-+]+\+/); // border
+    assert.match(out, /\|\s*Provider\s*\|\s*State\s*\|\s*Fetched\s*\|/); // header
+    assert.match(out, /\|\s*Usage status\s*\|/);
+    assert.match(out, /openai \(openai\)\s*\|\s*error\s*\|\s*—/);
+    // narrow terminal drops optional columns instead of overflowing
+    const narrow = stripAnsi(formatStatus([snap()], info, undefined, ctx, 45));
+    assert.equal(stripAnsi(narrow).split("\n").every((l: string) => l.length <= 45), true);
   });
 });
 

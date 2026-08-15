@@ -65,6 +65,18 @@ function toIso(v: unknown): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
+/** Z.ai returns reset times as `nextResetTime` epoch-ms (confirmed via the
+ * upstream glm-plan-usage plugin); also accept ISO strings defensively. */
+function toResetIso(...vals: readonly unknown[]): string | undefined {
+  for (const v of vals) {
+    if (typeof v === "string" && v.length > 0) return v;
+    if (typeof v === "number" && Number.isFinite(v) && v > 1_000_000_000_000) {
+      return new Date(v).toISOString();
+    }
+  }
+  return undefined;
+}
+
 function toLabel(v: unknown): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
@@ -112,8 +124,17 @@ function parseQuotaLimit(payload: unknown): UsageQuota[] {
     const item = raw as Record<string, unknown>;
     const type = typeof item.type === "string" ? item.type : "";
     const pct = clampPercentage(toNum(item.percentage));
+    const resetAt = toResetIso(item.nextResetTime, item.resetAt);
     if (type === "TOKENS_LIMIT") {
-      out.push({ id: "five_hour", label: "5-hour quota", percentage: pct, resetAt: toIso(item.resetAt) });
+      // Upstream: TOKENS_LIMIT unit=3 is the 5-hour token quota; unit=6 is the
+      // weekly quota on newer plans. API exposes percentage and reset only —
+      // no token used/limit numbers — so Used/Left render as "—".
+      const weekly = toNum(item.unit) === 6;
+      out.push(
+        weekly
+          ? { id: "weekly", label: "Weekly quota", percentage: pct, resetAt }
+          : { id: "five_hour", label: "5-hour quota", percentage: pct, resetAt },
+      );
     } else if (type === "TIME_LIMIT") {
       // Upstream glm-plan-usage labels this "MCP usage(1 Month)": a monthly cap on
       // MCP tool invocations (web search, web reader, repo lookup), not model tokens.
@@ -126,6 +147,7 @@ function parseQuotaLimit(payload: unknown): UsageQuota[] {
         used,
         limit,
         remaining: computeRemaining(limit, used),
+        resetAt,
         details: parseUsageDetails(item.usageDetails, limit),
       });
     } else if (type) {
@@ -133,8 +155,9 @@ function parseQuotaLimit(payload: unknown): UsageQuota[] {
     }
   }
   // Deterministic display order regardless of API array order: 5-hour quota
-  // first, then MCP monthly, then any future quota types in arrival order.
-  const rank = (q: UsageQuota) => (q.id === "five_hour" ? 0 : q.id === "monthly" ? 1 : 2);
+  // first, then weekly, then MCP monthly, then any future quota types in arrival order.
+  const rank = (q: UsageQuota) =>
+    q.id === "five_hour" ? 0 : q.id === "weekly" ? 1 : q.id === "monthly" ? 2 : 3;
   return out
     .map((q, i) => ({ q, i }))
     .sort((a, b) => rank(a.q) - rank(b.q) || a.i - b.i)

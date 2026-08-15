@@ -178,7 +178,7 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
             const snaps = await collectCached();
             const info = service.getCacheInfo();
             const last = service.getLastRefreshAt();
-            renderWidget(ctx, () => formatStatus(snaps, info, last, fmtCtx()));
+            renderWidget(ctx, (width) => formatStatus(snaps, info, last, fmtCtx(), width));
             return;
           }
           case "unknown": {

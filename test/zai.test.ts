@@ -53,6 +53,28 @@ describe("ZaiProvider - happy path", () => {
     assert.deepEqual(snap.quotas.map((q) => q.id), ["five_hour", "monthly"]);
   });
 
+  it("parses nextResetTime epoch and weekly quota (unit=6)", async () => {
+    const provider = createZaiProvider({
+      resolveAuth: async () => AUTH,
+      now: () => FIXED,
+      fetchImpl: makeFetch((url) => {
+        if (url.includes("/quota/limit"))
+          return res(200, quotaBody([
+            { type: "TOKENS_LIMIT", unit: 3, percentage: 28, nextResetTime: 1755234000000 },
+            { type: "TOKENS_LIMIT", unit: 6, percentage: 55, nextResetTime: 1755801600000 },
+            { type: "TIME_LIMIT", percentage: 0, currentValue: 0, usage: 100, nextResetTime: 1759276800000 },
+          ]));
+        return res(404, {});
+      }),
+    });
+    const snap = await provider.getUsage();
+    assert.deepEqual(snap.quotas.map((q) => q.id), ["five_hour", "weekly", "monthly"]);
+    assert.equal(snap.quotas[0]?.resetAt, new Date(1755234000000).toISOString());
+    assert.equal(snap.quotas[0]?.used, undefined); // API gives percentage only
+    assert.equal(snap.quotas[1]?.label, "Weekly quota");
+    assert.equal(snap.quotas[2]?.resetAt, new Date(1759276800000).toISOString());
+  });
+
   it("parses quotas and models", async () => {
     const provider = createZaiProvider({
       resolveAuth: async () => AUTH,

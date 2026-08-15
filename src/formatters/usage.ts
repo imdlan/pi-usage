@@ -363,26 +363,32 @@ export function formatSummary(snapshots: readonly UsageSnapshot[], ctx?: FormatC
   return sanitizeText(lines.join("\n"));
 }
 
-/** Status report for `/usage status`. */
+/** Status report for `/usage status`, rendered as a bordered ASCII table. */
 export function formatStatus(
   snapshots: readonly UsageSnapshot[],
   cacheInfo: readonly CacheInfo[],
   lastRefreshAt: number | undefined,
   ctx?: FormatContext,
+  width?: number,
 ): string {
-  const lines: string[] = [];
-  lines.push(
-    `Last refresh: ${lastRefreshAt !== undefined ? isoLabel(new Date(lastRefreshAt).toISOString()) : "never"}`,
-  );
-  lines.push("");
-  lines.push("Status line: " + (snapshots.length > 0 ? formatStatusLine(snapshots, ctx) : "(empty)"));
-  lines.push("");
-  lines.push("Providers:");
-  for (const c of cacheInfo) {
+  const columns: readonly ColumnSpec[] = [
+    { title: "Provider" },
+    { title: "State", optional: 1 },
+    { title: "Fetched", optional: 2 },
+  ];
+  const rows: TableRow[] = cacheInfo.map((c) => {
     const name = ctx?.nameOf?.(c.id) ?? c.id;
     const state = c.hasError ? "error" : c.stale ? "stale" : c.cached ? "ok" : "not cached";
     const fetched = c.fetchedAt !== undefined ? isoLabel(new Date(c.fetchedAt).toISOString()) : "—";
-    lines.push(`  ${name} (${c.id}): ${state}, fetched ${fetched}`);
+    return { cells: [`${name} (${c.id})`, state, fetched] };
+  });
+  const titles = [
+    "Usage status",
+    `last refresh ${lastRefreshAt !== undefined ? isoLabel(new Date(lastRefreshAt).toISOString()) : "never"}`,
+    `status line  ${snapshots.length > 0 ? formatStatusLine(snapshots, ctx) : "(empty)"}`,
+  ];
+  if (rows.length === 0) {
+    return sanitizeText(titles.join("\n") + "\n\nNo providers registered.");
   }
-  return sanitizeText(lines.join("\n"));
+  return sanitizeText(renderAsciiTable(columns, rows, width, titles).join("\n"));
 }
