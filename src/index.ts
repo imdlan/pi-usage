@@ -29,32 +29,48 @@ const WIDGET_KEY = "pi-usage";
 
 /**
  * Build a Z.ai auth resolver backed by Pi's authorized `getProviderAuth`.
- * Scans configured providers for one whose base URL host is on the Z.ai
- * allowlist and resolves its token. Returns undefined when none is available
- * (fail-closed). Never reads credential files or env vars directly.
+ *
+ * Candidate providers are discovered from the FULL model catalog via
+ * `getAll()`, NOT from `getRegisteredProviderIds()`. The latter only lists
+ * providers registered by *extensions* (e.g. the bundled `llama.cpp`), so a
+ * normally-configured provider such as the GLM Coding Plan (`zai-coding-cn`),
+ * which is registered through models config + catalog cache, is never listed
+ * and the resolver would silently miss it.
+ *
+ * Every model carries both its `provider` id and `baseUrl`, which is enough to
+ * locate any Z.ai-configured provider while staying within the host allowlist
+ * (fail-closed). Returns undefined when none is available. Never reads
+ * credential files or env vars directly.
  */
 function createZaiAuthResolver(ctx: ExtensionContext): () => Promise<ProviderAuth | undefined> {
   const registry = ctx.modelRegistry;
   return async () => {
-    let ids: readonly string[];
+    let models: readonly { provider: string; baseUrl: string }[];
     try {
-      ids = registry.getRegisteredProviderIds();
+      models = registry.getAll();
     } catch {
       return undefined;
     }
-    for (const id of ids) {
-      const provider = registry.getProvider(id) as { baseUrl?: string } | undefined;
-      const baseUrl = provider?.baseUrl;
-      if (typeof baseUrl !== "string" || baseUrl.length === 0) continue;
+    // First-seen order, deduped by provider id. Keep only models whose host is
+    // on the Z.ai allowlist so we never touch a non-Z.ai provider's auth.
+    const seen = new Set<string>();
+    const candidates: { providerId: string; baseUrl: string }[] = [];
+    for (const m of models) {
+      if (!m || typeof m.provider !== "string" || typeof m.baseUrl !== "string") continue;
+      if (seen.has(m.provider)) continue;
       let host: string;
       try {
-        host = new URL(baseUrl).hostname;
+        host = new URL(m.baseUrl).hostname;
       } catch {
         continue;
       }
       if (!(ZAI_ALLOWED_HOSTS as readonly string[]).includes(host)) continue;
+      seen.add(m.provider);
+      candidates.push({ providerId: m.provider, baseUrl: m.baseUrl });
+    }
+    for (const { providerId, baseUrl } of candidates) {
       try {
-        const auth = (await registry.getProviderAuth(id)) as
+        const auth = (await registry.getProviderAuth(providerId)) as
           | { auth?: { apiKey?: string } }
           | undefined;
         const apiKey = auth?.auth?.apiKey;

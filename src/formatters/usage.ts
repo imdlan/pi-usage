@@ -10,7 +10,7 @@
 
 import { CONFIG } from "../config.js";
 import type { CacheInfo } from "../services/usage-service.js";
-import type { UsageQuota, UsageSnapshot } from "../providers/types.js";
+import type { UsageQuota, UsageQuotaDetail, UsageSnapshot } from "../providers/types.js";
 import { sanitizeText } from "../utils/sanitize.js";
 import { truncate } from "../utils/time.js";
 
@@ -25,7 +25,7 @@ function nameOf(s: UsageSnapshot, ctx?: FormatContext): string {
 
 function shortLabel(q: UsageQuota): string {
   if (q.id === "five_hour") return "5h";
-  if (q.id === "monthly") return "month";
+  if (q.id === "monthly") return "mcp";
   return q.label;
 }
 
@@ -39,6 +39,14 @@ function pad(s: string, n: number): string {
 
 function fmtNum(n?: number): string {
   return n === undefined || !Number.isFinite(n) ? "—" : String(n);
+}
+
+function detailParts(d: UsageQuotaDetail): string {
+  const parts: string[] = [];
+  if (d.used !== undefined) parts.push(`used ${fmtNum(d.used)}`);
+  if (d.limit !== undefined) parts.push(`limit ${fmtNum(d.limit)}`);
+  if (d.remaining !== undefined) parts.push(`remaining ${fmtNum(d.remaining)}`);
+  return parts.length > 0 ? `   ${parts.join("  ·  ")}` : "";
 }
 
 function isoLabel(iso?: string): string {
@@ -88,6 +96,11 @@ export function formatProviderDetail(s: UsageSnapshot, ctx?: FormatContext): str
       if (q.resetAt) parts.push(`resets ${isoLabel(q.resetAt)}`);
       if (parts.length > 0) row += `   ${parts.join("  ·  ")}`;
       lines.push(row);
+      if (q.details && q.details.length > 0) {
+        for (const d of q.details) {
+          lines.push(`      ${pad(d.label, 18)}${pad(formatPct(d.percentage), 6)}${detailParts(d)}`);
+        }
+      }
     }
   } else {
     lines.push("Quotas: (none reported)");

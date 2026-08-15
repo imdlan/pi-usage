@@ -79,7 +79,7 @@ Pi loads the TypeScript entry directly (via `jiti`), so no build step is require
 | Command | Behavior |
 | --- | --- |
 | `/usage` | Usage summary for all available providers; actionable guidance when none are available. |
-| `/usage zai` | Detailed Z.ai / GLM Coding Plan usage (5-hour quota, monthly quota, per-model usage, reset times). |
+| `/usage zai` | Detailed Z.ai / GLM Coding Plan usage (5-hour quota, MCP monthly quota with per-tool breakdown, per-model usage, reset times). |
 | `/usage refresh` | Force-refresh all available providers, ignoring the cache. Keeps the last good snapshot if a refresh fails. |
 | `/usage status` | Show status line content, last refresh time, cache state, and provider availability. |
 
@@ -90,7 +90,7 @@ Output is formatted for the terminal and never contains keys, tokens, cookies, o
 A compact line is written to Pi's footer, for example:
 
 ```
-GLM · 5h 32% · month 18%
+GLM · 5h 32% · mcp 18%
 ```
 
 When data is unavailable it degrades to:
@@ -117,7 +117,7 @@ The extension does **not** accept plaintext keys, arbitrary URLs, or any configu
 ```bash
 npm install              # dev dependencies (typescript, tsx, @types/node, pi types)
 npm run typecheck        # strict tsc, no emit
-pm test                 # node:test via tsx
+npm test                # node:test via tsx
 ```
 
 If your npm mirror restricts the `@earendil-works` scope, install the Pi type
@@ -171,7 +171,7 @@ The Z.ai implementation mirrors the behavior of the official [`glm-plan-usage`](
 
 - These endpoints and response fields **may change** without notice. Parsing is concentrated in `src/providers/zai.ts` so it can be updated in one place.
 - The extension **does not store or upload keys**. It only reads usage through Pi's authorized provider auth and the official usage endpoints.
-- Only `quota/limit` has a confirmed, structured shape (`TOKENS_LIMIT` = 5-hour quota, `TIME_LIMIT` = monthly quota). `model-usage` / `tool-usage` are parsed defensively and degrade gracefully when their fields are absent.
+- Only `quota/limit` has a confirmed, structured shape (`TOKENS_LIMIT` = 5-hour quota, `TIME_LIMIT` = MCP monthly quota, i.e. the monthly cap on MCP tool invocations). Its `usageDetails` field (per-tool monthly breakdown) is parsed defensively. `model-usage` / `tool-usage` are parsed defensively and degrade gracefully when their fields are absent.
 
 ## License
 

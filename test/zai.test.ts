@@ -44,7 +44,16 @@ describe("ZaiProvider - happy path", () => {
         if (url.includes("/quota/limit"))
           return res(200, quotaBody([
             { type: "TOKENS_LIMIT", percentage: 32 },
-            { type: "TIME_LIMIT", percentage: 18, currentValue: 5000, usage: 28000 },
+            {
+              type: "TIME_LIMIT",
+              percentage: 18,
+              currentValue: 5000,
+              usage: 28000,
+              usageDetails: [
+                { toolName: "web_search", currentValue: 3000, usage: 28000 },
+                { toolName: "web_reader", currentValue: 2000 },
+              ],
+            },
           ]));
         if (url.includes("/model-usage"))
           return res(200, { data: [{ model: "glm-4.6", used: 1000, percentage: 5 }] });
@@ -65,6 +74,17 @@ describe("ZaiProvider - happy path", () => {
     assert.equal(monthly?.used, 5000);
     assert.equal(monthly?.limit, 28000);
     assert.equal(monthly?.remaining, 23000);
+    assert.equal(monthly?.label, "MCP monthly quota");
+    assert.equal(monthly?.details?.length, 2);
+    const search = monthly?.details?.[0];
+    assert.equal(search?.id, "web_search");
+    assert.equal(search?.used, 3000);
+    assert.equal(search?.limit, 28000);
+    assert.equal(search?.remaining, 25000);
+    assert.equal(search?.percentage, 10.7);
+    const reader = monthly?.details?.[1];
+    assert.equal(reader?.used, 2000);
+    assert.equal(reader?.limit, 28000);
     assert.ok(snap.models);
     assert.equal(snap.models?.[0]?.model, "glm-4.6");
     assert.equal(snap.models?.[0]?.used, 1000);

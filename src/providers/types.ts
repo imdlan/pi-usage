@@ -14,6 +14,22 @@
  * in memory only and never serialized.
  */
 
+/** Per-item breakdown inside a quota window, e.g. per-MCP-tool monthly usage. */
+export interface UsageQuotaDetail {
+  /** Stable identifier for the item, e.g. `web_search`. */
+  readonly id: string;
+  /** Human-readable label, e.g. a tool or product name. */
+  readonly label: string;
+  /** Amount already consumed, when known. */
+  readonly used?: number;
+  /** Total allowance, when known. */
+  readonly limit?: number;
+  /** Remaining allowance, when known. */
+  readonly remaining?: number;
+  /** Consumption percentage on a 0-100 scale, when known. */
+  readonly percentage?: number;
+}
+
 /** A single quota window (e.g. a 5-hour quota, a monthly quota). */
 export interface UsageQuota {
   /** Stable identifier, e.g. `five_hour`, `monthly`. */
@@ -30,6 +46,8 @@ export interface UsageQuota {
   readonly percentage?: number;
   /** ISO-8601 (UTC) reset timestamp, when known. */
   readonly resetAt?: string;
+  /** Optional per-item breakdown of this window, when the API exposes one. */
+  readonly details?: readonly UsageQuotaDetail[];
 }
 
 /** Per-model usage, when a provider exposes model-level breakdowns. */

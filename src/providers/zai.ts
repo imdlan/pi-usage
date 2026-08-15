@@ -21,7 +21,7 @@
 
 import { CONFIG } from "../config.js";
 import { controlledGetJson } from "../utils/http.js";
-import { clampPercentage, computeRemaining, zaiUsageWindow } from "../utils/time.js";
+import { clampPercentage, computePercentage, computeRemaining, zaiUsageWindow } from "../utils/time.js";
 import { toUsageError, UsageErrorCode } from "./types.js";
 import type {
   ModelUsage,
@@ -29,6 +29,7 @@ import type {
   UsageError,
   UsageProvider,
   UsageQuota,
+  UsageQuotaDetail,
   UsageRefreshOptions,
   UsageSnapshot,
 } from "./types.js";
@@ -61,6 +62,10 @@ function toNum(v: unknown): number | undefined {
 }
 
 function toIso(v: unknown): string | undefined {
+  return typeof v === "string" && v.length > 0 ? v : undefined;
+}
+
+function toLabel(v: unknown): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
@@ -110,20 +115,69 @@ function parseQuotaLimit(payload: unknown): UsageQuota[] {
     if (type === "TOKENS_LIMIT") {
       out.push({ id: "five_hour", label: "5-hour quota", percentage: pct, resetAt: toIso(item.resetAt) });
     } else if (type === "TIME_LIMIT") {
+      // Upstream glm-plan-usage labels this "MCP usage(1 Month)": a monthly cap on
+      // MCP tool invocations (web search, web reader, repo lookup), not model tokens.
       const used = toNum(item.currentValue);
       const limit = toNum(item.usage);
       out.push({
         id: "monthly",
-        label: "Monthly quota",
+        label: "MCP monthly quota",
         percentage: pct,
         used,
         limit,
         remaining: computeRemaining(limit, used),
+        details: parseUsageDetails(item.usageDetails, limit),
       });
     } else if (type) {
       out.push({ id: slug(type), label: type, percentage: pct });
     }
   }
+  return out;
+}
+
+/**
+ * Defensively parse `usageDetails` — the per-MCP-tool breakdown of the monthly
+ * quota. The upstream plugin passes this field through unmodified, so its exact
+ * shape is unconfirmed; parse common field variants and degrade to no details.
+ * Supports both an array of items and a `{ toolName: {...} }` object map.
+ */
+function parseUsageDetails(payload: unknown, parentLimit?: number): UsageQuotaDetail[] {
+  let entries: unknown[];
+  let keys: (string | undefined)[] | undefined;
+  if (Array.isArray(payload)) {
+    entries = payload;
+  } else if (payload && typeof payload === "object") {
+    const map = payload as Record<string, unknown>;
+    keys = Object.keys(map);
+    entries = Object.values(map);
+  } else {
+    return [];
+  }
+  const out: UsageQuotaDetail[] = [];
+  entries.forEach((raw, i) => {
+    if (!raw || typeof raw !== "object") return;
+    const item = raw as Record<string, unknown>;
+    const label =
+      toLabel(item.toolName ?? item.name ?? item.tool ?? item.type ?? item.model) ??
+      (keys ? keys[i] : undefined);
+    if (!label) return;
+    // Top-level TIME_LIMIT maps `currentValue` -> used and `usage` -> limit.
+    // Follow the same convention inside details, then fall back to other keys.
+    const used = toNum(item.currentValue ?? item.used ?? item.count);
+    const limit =
+      item.currentValue !== undefined ? toNum(item.usage) : toNum(item.limit ?? item.usage);
+    const effLimit = limit ?? (used !== undefined ? parentLimit : undefined);
+    const pct = clampPercentage(toNum(item.percentage)) ?? computePercentage(used, effLimit);
+    const detail: UsageQuotaDetail = {
+      id: slug(label),
+      label,
+      used,
+      limit: effLimit,
+      remaining: computeRemaining(effLimit, used),
+      percentage: pct,
+    };
+    out.push(detail);
+  });
   return out;
 }
 

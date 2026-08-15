@@ -21,7 +21,18 @@ function snap(over: Partial<UsageSnapshot> = {}): UsageSnapshot {
     timestamp: "2025-05-14T10:30:45.000Z",
     quotas: [
       { id: "five_hour", label: "5-hour quota", percentage: 32 },
-      { id: "monthly", label: "Monthly quota", percentage: 18, used: 5000, limit: 28000, remaining: 23000 },
+      {
+        id: "monthly",
+        label: "MCP monthly quota",
+        percentage: 18,
+        used: 5000,
+        limit: 28000,
+        remaining: 23000,
+        details: [
+          { id: "web_search", label: "web-search", used: 3000, limit: 28000, remaining: 25000, percentage: 10.7 },
+          { id: "web_reader", label: "web-reader", used: 2000 },
+        ],
+      },
     ],
     ...over,
   };
@@ -29,7 +40,7 @@ function snap(over: Partial<UsageSnapshot> = {}): UsageSnapshot {
 
 describe("status line", () => {
   it("formats quotas compactly", () => {
-    assert.equal(providerStatusSegment(snap(), ctx), "GLM · 5h 32% · month 18%");
+    assert.equal(providerStatusSegment(snap(), ctx), "GLM · 5h 32% · mcp 18%");
   });
 
   it("degrades to unavailable when no quotas", () => {
@@ -41,7 +52,7 @@ describe("status line", () => {
     const line = formatStatusLine([snap(), snap({ provider: "openai" })], {
       nameOf: (id) => (id === "zai" ? "GLM" : id === "openai" ? "OpenAI" : id),
     });
-    assert.match(line, /GLM · 5h 32% · month 18% \| OpenAI/);
+    assert.match(line, /GLM · 5h 32% · mcp 18% \| OpenAI/);
   });
 
   it("truncates to the configured max length", () => {
@@ -61,9 +72,11 @@ describe("formatProviderDetail", () => {
     const s = snap({ models: [{ model: "glm-4.6", used: 1000, percentage: 5 }] });
     const out = formatProviderDetail(s, ctx);
     assert.match(out, /5-hour quota/);
-    assert.match(out, /Monthly quota/);
+    assert.match(out, /MCP monthly quota/);
     assert.match(out, /used 5000/);
     assert.match(out, /limit 28000/);
+    assert.match(out, /web-search/);
+    assert.match(out, /web-search\s+11%/);
     assert.match(out, /Models:/);
     assert.match(out, /glm-4\.6/);
     assert.match(out, /refreshed:.*UTC/);
@@ -90,7 +103,7 @@ describe("formatProviderDetail", () => {
 describe("formatSummary", () => {
   it("lists each provider", () => {
     const out = formatSummary([snap()], ctx);
-    assert.match(out, /GLM \(zai\) — 5h 32% · month 18%/);
+    assert.match(out, /GLM \(zai\) — 5h 32% · mcp 18%/);
   });
 
   it("gives guidance when empty", () => {
