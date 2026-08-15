@@ -22,6 +22,11 @@ GLM (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% 2026-08-27 09:43:00
 
 status line
 GLM · 5h 32% · MCP 18%
+
+/usage pin
+┌─ pinned above the editor ────────────────────────────────┐
+│ GLM (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% …    │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ## Install
@@ -52,7 +57,11 @@ Update with `pi update --extensions`; remove with `pi remove npm:@imdlan/pi-usag
 | `/usage zai` | Detailed Z.ai / GLM usage as a responsive ASCII table: 5-hour quota, MCP monthly quota with per-tool breakdown, per-model usage, reset times. |
 | `/usage refresh` | Force-refresh, ignoring the cache. Keeps the last good snapshot on failure. |
 | `/usage status` | Status line content, last refresh, cache state, provider availability. |
-| `/usage pin` | Toggle the usage summary widget pinned above the editor; it stays in sync with the background refresh. `pin on` / `pin off` set the state explicitly. |
+| `/usage pin` | Toggle the summary widget pinned above the editor, auto-refreshed every background cycle (~2 min). `pin on` / `pin off` set the state explicitly. |
+
+### Pinned widget
+
+By default the summary only appears when you run `/usage`. Run `/usage pin` (or `pin on`) to keep it **pinned above the editor** — the same multi-line summary as `/usage`, kept in sync by the background refresh (no extra API calls; it re-renders from cache). `/usage pin off` (or `pin` again) removes it. Pin state is per-session and resets on Pi restart. Note the pinned widget occupies ~1 line per provider at the top of the chat area.
 
 The detail table is width-aware: narrow terminals drop optional columns (`Resets` → `Left` → `Used` → `Usage` bar), then truncate labels — never overflowing. The status line refreshes in the background every 2 minutes (cache TTL: 2 minutes) and degrades to `GLM · usage unavailable` when data is unavailable. It never blocks the UI or model requests.
 
