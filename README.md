@@ -1,95 +1,16 @@
 # pi-usage
 
-A [Pi Coding Agent](https://github.com/earendil-works/pi-coding-agent) extension that shows **usage and quota for multiple AI providers** directly inside Pi — via `/usage` commands and a compact status line.
+A [Pi Coding Agent](https://github.com/earendil-works/pi-coding-agent) extension that shows **AI provider usage and quota** inside Pi — via `/usage` commands and a compact status line.
 
-It is built around a generic provider abstraction so new providers can be added without touching the core. **Z.ai / GLM Coding Plan** is the first fully implemented provider; OpenAI, Anthropic, and OpenRouter are reserved as future integration points.
-
-> Read-only and privacy-first: this extension only **queries** usage. It never modifies provider state, never stores or uploads credentials, and never collects telemetry.
-
----
-
-## Features
-
-- **`/usage`** — summary of every configured & available provider.
-- **`/usage <provider>`** — detailed view for one provider (e.g. `/usage zai`), rendered as a responsive ASCII table with per-quota and per-model numbers and reset times when the API exposes them.
-- **`/usage refresh`** — bypass the cache and refresh all available providers immediately.
-- **`/usage status`** — show the current status line, last successful refresh, cache state, and per-provider availability.
-- **Non-blocking status line** — async refresh at startup and on a background timer, with safe degradation when data is unavailable.
-
-## Supported providers
-
-| Provider | Status |
-| --- | --- |
-| **Z.ai / GLM Coding Plan** | Implemented (first release) |
-| OpenAI | Reserved — integration structure only |
-| Anthropic | Reserved — integration structure only |
-| OpenRouter | Reserved — integration structure only |
-
-## How it works
-
-### Authentication (no secrets handled)
-
-For each provider, pi-usage resolves credentials **through Pi's own authorized provider auth API** (`getProviderAuth`), which Pi uses to resolve your configured API keys, stored credentials, and env interpolation. The extension:
-
-- **Never reads** `~/.pi/agent/auth.json`, `.env`, `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.netrc`, or any other credential file.
-- **Never scans** your home, project, or Pi config directory for credentials.
-- **Never runs** shell commands or subprocesses.
-- **Fails closed** when no authorized provider/auth is available — it reports that the provider is unavailable instead of trying to guess or fall back.
-
-### Networking
-
-- All requests use **HTTPS only**, restricted to each provider's officially confirmed usage-API host allowlist.
-- Requests reject arbitrary URLs, non-HTTPS targets, and cross-origin redirects.
-- Each provider's auth, allowlist, and error handling are isolated; one provider cannot touch another's credentials or responses.
-
-### Privacy
-
-- No telemetry, no uploading of code, prompts, sessions, or file paths.
-- Logs, command output, status line, errors, and tests are sanitized — API keys, tokens, cookies, `Authorization` headers, and full HTTP bodies are never displayed.
-
----
-
-## Requirements
-
-- Pi Coding Agent
-- Node.js 20+
-- A configured Z.ai provider in Pi whose base URL points at an official Z.ai / GLM endpoint (e.g. `https://api.z.ai/api/anthropic`) and whose API key resolves to your GLM Coding Plan token.
-
-## Installation
-
-### As a Pi package (recommended)
-
-```bash
-pi install git:github.com/imdlan/pi-usage
-```
-
-Update with `pi update --extensions`. Remove with `pi remove git:github.com/imdlan/pi-usage`.
-
-### From a local clone
-
-```bash
-git clone https://github.com/imdlan/pi-usage.git
-pi install ./path/to/pi-usage
-```
-
-Pi loads the TypeScript entry directly (via `jiti`), so no build step is required.
-
-## Commands
-
-| Command | Behavior |
-| --- | --- |
-| `/usage` | Usage summary for all available providers; actionable guidance when none are available. |
-| `/usage zai` | Detailed Z.ai / GLM Coding Plan usage as a responsive ASCII table (5-hour quota, MCP monthly quota with per-tool breakdown, per-model usage, reset times). |
-| `/usage refresh` | Force-refresh all available providers, ignoring the cache. Keeps the last good snapshot if a refresh fails. |
-| `/usage status` | Show status line content, last refresh time, cache state, and provider availability. |
-
-Output is formatted for the terminal and never contains keys, tokens, cookies, or `Authorization` headers.
-
-### Detail view
-
-`/usage <provider>` renders a bordered ASCII table. The provider name and refresh time form a centered spanning header; each quota and its sub-items occupy rows separated by horizontal rules. Example:
+Currently supports **Z.ai / GLM Coding Plan**; architected to add more providers (OpenAI, Anthropic, OpenRouter) without touching the core.
 
 ```
+/usage
+┌ Providers ────────────────────────────────────────────────┐
+│ GLM   5h 32% · MCP 18%                                    │
+└───────────────────────────────────────────────────────────┘
+
+/usage zai
 +-------------------+--------------+-----+--------------+-------+---------------------------+
 |                                            GLM                                            |
 |                             refreshed 2026-08-15 09:43 local                              |
@@ -97,108 +18,86 @@ Output is formatted for the terminal and never contains keys, tokens, cookies, o
 | Quota             | Usage        | Pct | Used         | Left  | Resets                    |
 +-------------------+--------------+-----+--------------+-------+---------------------------+
 | MCP monthly quota | [##--------] | 18% | 180 / 1000   | 820   | 08-27 01:43 UTC (in 288h) |
-+-------------------+--------------+-----+--------------+-------+---------------------------+
 |   web-search      | [##--------] | 22% | 220 / 1000   | 780   | —                         |
-+-------------------+--------------+-----+--------------+-------+---------------------------+
-|   codebase-search | [#---------] | 10% | 100 / 1000   | 900   | —                         |
-+-------------------+--------------+-----+--------------+-------+---------------------------+
 | 5-hour quota      | [###-------] | 32% | 5000 / 28000 | 23000 | 08-15 03:43 UTC (in 2h)   |
 +-------------------+--------------+-----+--------------+-------+---------------------------+
 
-Models:
-  glm-4.6                 12000  (43%)
-  glm-4.5-air             3000  (11%)
-```
-
-The table is width-aware and re-renders on terminal resize: narrower terminals drop optional columns (`Resets` → `Left` → `Used` → `Usage` bar), then truncate long labels — never overflowing. The header layout is provider-agnostic, so future providers render the same table with their own name.
-
-## Status line
-
-A compact line is written to Pi's footer, for example:
-
-```
+status line
 GLM · 5h 32% · MCP 18%
 ```
 
-When data is unavailable it degrades to:
+## Install
 
+```bash
+pi install npm:@imdlan/pi-usage
 ```
-GLM · usage unavailable
+
+Also available from git or a local clone:
+
+```bash
+pi install git:github.com/imdlan/pi-usage
+pi install ./path/to/pi-usage
 ```
 
-The status line never blocks model requests, commands, or the UI.
+Update with `pi update --extensions`; remove with `pi remove npm:@imdlan/pi-usage`.
 
-## Configuration
+### Requirements
 
-Defaults are centralized and tuned for safety. Notable defaults:
+- Node.js 20+
+- A configured Z.ai provider in Pi whose base URL points at an official Z.ai / GLM endpoint (e.g. `https://api.z.ai/api/anthropic`) and whose API key resolves to your GLM Coding Plan token.
 
-- Cache TTL: **2 minutes**
-- Request timeout: **10 seconds**
-- Background refresh interval: **2 minutes**
-- Network allowlist: per provider (Z.ai: `api.z.ai`, `open.bigmodel.cn`, `dev.bigmodel.cn`)
+## Commands
 
-The extension does **not** accept plaintext keys, arbitrary URLs, or any configuration that could weaken its security boundaries.
+| Command | Behavior |
+| --- | --- |
+| `/usage` | Usage summary for all available providers. |
+| `/usage zai` | Detailed Z.ai / GLM usage as a responsive ASCII table: 5-hour quota, MCP monthly quota with per-tool breakdown, per-model usage, reset times. |
+| `/usage refresh` | Force-refresh, ignoring the cache. Keeps the last good snapshot on failure. |
+| `/usage status` | Status line content, last refresh, cache state, provider availability. |
+
+The detail table is width-aware: narrow terminals drop optional columns (`Resets` → `Left` → `Used` → `Usage` bar), then truncate labels — never overflowing. The status line refreshes in the background every 2 minutes (cache TTL: 2 minutes) and degrades to `GLM · usage unavailable` when data is unavailable. It never blocks the UI or model requests.
+
+## Security & privacy
+
+- **Read-only**: only queries usage; never modifies provider state.
+- **No secrets handled**: credentials resolve through Pi's authorized provider auth API (`getProviderAuth`). Never reads `auth.json`, `.env`, `~/.ssh`, or credential files; never runs subprocesses; fails closed when auth is unavailable.
+- **Locked-down networking**: HTTPS only, per-provider host allowlist (Z.ai: `api.z.ai`, `open.bigmodel.cn`, `dev.bigmodel.cn`), redirects rejected.
+- **No telemetry**; all output is sanitized — keys, tokens, cookies, and `Authorization` headers are never displayed.
 
 ## Development
 
 ```bash
-npm install              # dev dependencies (typescript, tsx, @types/node, pi types)
-npm run typecheck        # strict tsc, no emit
-npm test                # node:test via tsx
+npm install
+npm run typecheck   # strict tsc
+npm test            # node:test via tsx
 ```
 
-If your npm mirror restricts the `@earendil-works` scope, install the Pi type
-package from the official registry instead:
-`npm install --registry=https://registry.npmjs.org`.
-
-Runtime dependencies: **zero**. The extension uses only Node.js built-ins (`fetch`, `AbortController`) and the Pi Extension API. Dev dependencies are documented above.
-
-### Project layout
+Runtime dependencies: **zero** (Node built-ins + Pi Extension API only). Layout:
 
 ```
 src/
-  index.ts              # Pi entry: commands, lifecycle, status line, timers
-  config.ts             # Centralized defaults (TTL, timeout, allowlists)
-  providers/
-    types.ts            # Generic Provider / Snapshot / Quota model
-    registry.ts         # Provider registration & discovery
-    zai.ts              # Z.ai / GLM adapter (official endpoint logic)
-  services/
-    usage-service.ts    # refresh, cache, dedup, stale fallback
-    status-line.ts      # status line rendering & update strategy
-  formatters/
-    usage.ts            # command + status text formatting, responsive ASCII table renderer
-  utils/
-    http.ts             # controlled fetch: timeout, HTTPS, allowlist, redirect-reject
-    time.ts             # time windows, ISO display, percentage/remaining math
-    sanitize.ts         # redaction & error normalization
-test/                   # unit, provider, cache, command, and security tests
+  index.ts            # Pi entry: commands, lifecycle, status line
+  config.ts           # defaults (TTL, timeout, allowlists)
+  providers/          # types, registry, zai adapter
+  services/           # refresh/cache, status line
+  formatters/         # command output, ASCII table renderer
+  utils/              # controlled fetch, time math, redaction
+test/                 # unit, provider, cache, command, security tests
 ```
 
-### Adding a provider
+Adding a provider: implement `UsageProvider` in `src/providers/<name>.ts` with its own auth strategy, allowlist, and redaction rules; register it in `registry.ts`; add tests (missing fields, 401/403/429/5xx, timeout, allowlist, redaction).
 
-1. Create `src/providers/<name>.ts` implementing `UsageProvider`.
-2. Declare its own auth strategy, HTTPS allowlist, parsing, and redaction rules — isolated from other providers.
-3. Register it in `src/providers/registry.ts`.
-4. Add tests (normal, missing fields, invalid JSON, 401/403/429/5xx, timeout) plus allowlist and redaction coverage.
+### Publish
 
-Do not assume a new provider shares Z.ai's quota windows or data model.
+```bash
+npm publish          # @imdlan/pi-usage, public scoped package
+```
 
-## Contributing
+Pi loads the TypeScript entry directly (via `jiti`), so no build step is needed.
 
-Contributions are welcome. Please:
+## Z.ai integration notes
 
-- Keep runtime dependencies at zero.
-- Keep TypeScript `strict` passing and all tests green, including the security suite (secret scanning, allowlist, redaction, malicious-config).
-- Never commit credentials, real API responses, or anything containing a key/token/cookie.
-
-## Z.ai integration basis & disclaimer
-
-The Z.ai implementation mirrors the behavior of the official [`glm-plan-usage`](https://github.com/zai-org/zai-coding-plugins) plugin (`plugins/glm-plan-usage`): it derives usage endpoints from the configured base URL origin, authenticates via the token Pi already holds, and queries `model-usage`, `tool-usage`, and `quota/limit`.
-
-- These endpoints and response fields **may change** without notice. Parsing is concentrated in `src/providers/zai.ts` so it can be updated in one place.
-- The extension **does not store or upload keys**. It only reads usage through Pi's authorized provider auth and the official usage endpoints.
-- Only `quota/limit` has a confirmed, structured shape (`TOKENS_LIMIT` = 5-hour quota, `TIME_LIMIT` = MCP monthly quota, i.e. the monthly cap on MCP tool invocations). Its `usageDetails` field (per-tool monthly breakdown) is parsed defensively. `model-usage` / `tool-usage` are parsed defensively and degrade gracefully when their fields are absent.
+The Z.ai adapter mirrors the official [`glm-plan-usage`](https://github.com/zai-org/zai-coding-plugins) plugin: it derives usage endpoints from the configured base URL origin and queries `model-usage`, `tool-usage`, and `quota/limit` (`TOKENS_LIMIT` = 5-hour quota, `TIME_LIMIT` = MCP monthly quota). These endpoints may change without notice; parsing is isolated in `src/providers/zai.ts`.
 
 ## License
 
