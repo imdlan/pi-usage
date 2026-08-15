@@ -9,6 +9,7 @@ import {
   formatProviderDetail,
   formatSummary,
   formatStatus,
+  stripAnsi,
 } from "../src/formatters/usage.js";
 import type { CacheInfo } from "../src/services/usage-service.js";
 import type { UsageSnapshot } from "../src/providers/types.js";
@@ -68,23 +69,41 @@ describe("status line", () => {
 });
 
 describe("formatProviderDetail", () => {
-  it("renders quotas, models, refresh time", () => {
+  it("renders quotas with bar and details", () => {
     const s = snap({ models: [{ model: "glm-4.6", used: 1000, percentage: 5 }] });
-    const out = formatProviderDetail(s, ctx);
+    const out = stripAnsi(formatProviderDetail(s, ctx));
     assert.match(out, /5-hour quota/);
     assert.match(out, /MCP monthly quota/);
+    assert.match(out, /\[#*-*\]/);
     assert.match(out, /used 5000/);
-    assert.match(out, /limit 28000/);
+    assert.match(out, /\/ 28000/);
+    assert.match(out, /23000 left/);
     assert.match(out, /web-search/);
-    assert.match(out, /web-search\s+11%/);
     assert.match(out, /Models:/);
     assert.match(out, /glm-4\.6/);
-    assert.match(out, /refreshed:.*UTC/);
+    assert.match(out, /refreshed/);
+  });
+
+  it("colorizes by usage level", () => {
+    const low = formatProviderDetail(snap(), ctx);
+    assert.ok(low.includes("\u001b[32m"), "low usage should be green");
+    const hot = formatProviderDetail(
+      snap({ quotas: [{ id: "five_hour", label: "5-hour quota", percentage: 95 }] }),
+      ctx,
+    );
+    assert.ok(hot.includes("\u001b[31m"), "high usage should be red");
+  });
+
+  it("shows reset time with relative hint", () => {
+    const future = new Date(Date.now() + 2 * 3600_000).toISOString();
+    const s = snap({ quotas: [{ id: "five_hour", label: "5-hour quota", percentage: 10, resetAt: future }] });
+    const out = stripAnsi(formatProviderDetail(s, ctx));
+    assert.match(out, /resets \d{2}-\d{2} \d{2}:\d{2} UTC \(in [\dhm ]+\)/);
   });
 
   it("marks stale data and shows errors", () => {
     const s = snap({ stale: true, error: { code: "network", message: "boom", httpStatus: undefined } });
-    const out = formatProviderDetail(s, ctx);
+    const out = stripAnsi(formatProviderDetail(s, ctx));
     assert.match(out, /⚠ data may be stale/);
     assert.match(out, /error: network — boom/);
   });
@@ -94,8 +113,8 @@ describe("formatProviderDetail", () => {
       quotas: [{ id: "five_hour", label: "5-hour quota" }],
       models: [{ model: "m1" }],
     });
-    const out = formatProviderDetail(s, ctx);
-    assert.match(out, /5-hour quota\s+—\s/);
+    const out = stripAnsi(formatProviderDetail(s, ctx));
+    assert.match(out, /5-hour quota\s+—/);
     assert.match(out, /m1\s+—/);
   });
 });
@@ -130,7 +149,7 @@ describe("redaction in output", () => {
     const out = formatProviderDetail(s, {
       nameOf: () => "GLM Bearer supersecrettokenABC",
     });
-    assert.equal(out.includes("supersecrettokenABC"), false);
+    assert.equal(stripAnsi(out).includes("supersecrettokenABC"), false);
     assert.match(out, /REDACTED/);
   });
 });

@@ -12,7 +12,7 @@ import { CONFIG } from "../config.js";
 import type { CacheInfo } from "../services/usage-service.js";
 import type { UsageQuota, UsageQuotaDetail, UsageSnapshot } from "../providers/types.js";
 import { sanitizeText } from "../utils/sanitize.js";
-import { truncate } from "../utils/time.js";
+import { clampPercentage, pad2, truncate } from "../utils/time.js";
 
 export interface FormatContext {
   /** Resolve a provider id to a display name (e.g. "zai" -> "GLM"). */
@@ -33,6 +33,46 @@ function formatPct(p?: number): string {
   return p === undefined || !Number.isFinite(p) ? "—" : `${Math.round(p)}%`;
 }
 
+/** Terminal bar like [#####-----], `width` cells, 10% per cell. */
+function bar(p: number | undefined, width = 10): string {
+  if (p === undefined || !Number.isFinite(p)) return " ".repeat(width + 2);
+  const pct = clampPercentage(p) ?? 0;
+  const filled = Math.round((pct / 100) * width);
+  return `[${"#".repeat(filled)}${"-".repeat(width - filled)}]`;
+}
+
+function pctColor(p: number | undefined): (s: string) => string {
+  if (p === undefined || !Number.isFinite(p)) return (s) => s;
+  if (p >= 90) return red;
+  if (p >= 70) return yellow;
+  return green;
+}
+
+const ANSI_GREEN = "\u001b[32m";
+const ANSI_YELLOW = "\u001b[33m";
+const ANSI_RED = "\u001b[31m";
+const ANSI_DIM = "\u001b[2m";
+const ANSI_RESET = "\u001b[0m";
+
+function green(s: string): string {
+  return ANSI_GREEN + s + ANSI_RESET;
+}
+function yellow(s: string): string {
+  return ANSI_YELLOW + s + ANSI_RESET;
+}
+function red(s: string): string {
+  return ANSI_RED + s + ANSI_RESET;
+}
+function dim(s: string): string {
+  return ANSI_DIM + s + ANSI_RESET;
+}
+
+/** Strip ANSI escapes (used by tests and length math). */
+export function stripAnsi(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/\u001b\[[0-9;]*m/g, "");
+}
+
 function pad(s: string, n: number): string {
   return s.length >= n ? s : s + " ".repeat(n - s.length);
 }
@@ -43,14 +83,44 @@ function fmtNum(n?: number): string {
 
 function detailParts(d: UsageQuotaDetail): string {
   const parts: string[] = [];
-  if (d.used !== undefined) parts.push(`used ${fmtNum(d.used)}`);
-  if (d.limit !== undefined) parts.push(`limit ${fmtNum(d.limit)}`);
-  if (d.remaining !== undefined) parts.push(`remaining ${fmtNum(d.remaining)}`);
-  return parts.length > 0 ? `   ${parts.join("  ·  ")}` : "";
+  if (d.used !== undefined && d.limit !== undefined) parts.push(`used ${fmtNum(d.used)} / ${fmtNum(d.limit)}`);
+  else {
+    if (d.used !== undefined) parts.push(`used ${fmtNum(d.used)}`);
+    if (d.limit !== undefined) parts.push(`limit ${fmtNum(d.limit)}`);
+  }
+  if (d.remaining !== undefined) parts.push(`${fmtNum(d.remaining)} left`);
+  return parts.length > 0 ? dim(parts.join("  ·  ")) : "";
 }
 
 function isoLabel(iso?: string): string {
   return iso && iso.length > 0 ? `${iso} (UTC)` : "—";
+}
+
+/** `2025-05-14T10:30:45.000Z (UTC)` -> `05-14 10:30 UTC` (keeps UTC). */
+function shortIso(iso?: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(iso ?? "");
+  return m ? `${m[2]}-${m[3]} ${m[4]}:${m[5]} UTC` : isoLabel(iso);
+}
+
+function localIso(iso?: string): string {
+  if (!iso || iso.length === 0) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return isoLabel(iso);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())} local`;
+}
+
+/** Human-ish relative time: "in 2h 13m" / "3m ago", or undefined. */
+function relativeIso(iso?: string, now: Date = new Date()): string | undefined {
+  if (!iso || iso.length === 0) return undefined;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return undefined;
+  const diffMin = Math.round((t - now.getTime()) / 60000);
+  const abs = Math.abs(diffMin);
+  if (abs < 1) return diffMin >= 0 ? "now" : "now";
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  const span = h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ""}` : `${m}m`;
+  return diffMin >= 0 ? `in ${span}` : `${span} ago`;
 }
 
 /** One provider's compact status-line segment. */
@@ -77,33 +147,40 @@ export function formatStatusLine(snapshots: readonly UsageSnapshot[], ctx?: Form
 export function formatProviderDetail(s: UsageSnapshot, ctx?: FormatContext): string {
   const name = nameOf(s, ctx);
   const lines: string[] = [];
-  lines.push(`${name} (${s.provider})${s.stale ? "  ·  ⚠ data may be stale" : ""}`);
-  lines.push(`refreshed: ${isoLabel(s.timestamp)}`);
+  lines.push(`${name}${s.stale ? "  " + yellow("⚠ data may be stale") : ""}`);
+  lines.push(dim(`refreshed ${localIso(s.timestamp)}`));
   if (s.error) {
     const http = s.error.httpStatus ? ` (HTTP ${s.error.httpStatus})` : "";
-    lines.push(`error: ${s.error.code} — ${s.error.message}${http}`);
+    lines.push(red(`error: ${s.error.code} — ${s.error.message}${http}`));
   }
   lines.push("");
 
   if (s.quotas.length > 0) {
-    lines.push("Quotas:");
     for (const q of s.quotas) {
-      let row = `  ${pad(q.label, 18)}${pad(formatPct(q.percentage), 6)}`;
+      const color = pctColor(q.percentage);
+      lines.push(
+        `  ${pad(q.label, 18)}${bar(q.percentage)} ${color(formatPct(q.percentage))}`,
+      );
       const parts: string[] = [];
-      if (q.used !== undefined) parts.push(`used ${fmtNum(q.used)}`);
-      if (q.limit !== undefined) parts.push(`limit ${fmtNum(q.limit)}`);
-      if (q.remaining !== undefined) parts.push(`remaining ${fmtNum(q.remaining)}`);
-      if (q.resetAt) parts.push(`resets ${isoLabel(q.resetAt)}`);
-      if (parts.length > 0) row += `   ${parts.join("  ·  ")}`;
-      lines.push(row);
+      if (q.used !== undefined && q.limit !== undefined) parts.push(`used ${fmtNum(q.used)} / ${fmtNum(q.limit)}`);
+      else {
+        if (q.used !== undefined) parts.push(`used ${fmtNum(q.used)}`);
+        if (q.limit !== undefined) parts.push(`limit ${fmtNum(q.limit)}`);
+      }
+      if (q.remaining !== undefined) parts.push(`${fmtNum(q.remaining)} left`);
+      const rel = relativeIso(q.resetAt);
+      if (q.resetAt) parts.push(`resets ${shortIso(q.resetAt)}${rel ? ` (${rel})` : ""}`);
+      if (parts.length > 0) lines.push(`  ${" ".repeat(18 + 12 + 1)}${dim(parts.join("  ·  "))}`);
       if (q.details && q.details.length > 0) {
         for (const d of q.details) {
-          lines.push(`      ${pad(d.label, 18)}${pad(formatPct(d.percentage), 6)}${detailParts(d)}`);
+          const seg = `      ${pad(d.label, 18)}${bar(d.percentage, 8)} ${color(formatPct(d.percentage))}`;
+          const dp = detailParts(d);
+          lines.push(dp ? `${seg}  ${dp}` : seg);
         }
       }
     }
   } else {
-    lines.push("Quotas: (none reported)");
+    lines.push(dim("Quotas: (none reported)"));
   }
 
   if (s.models && s.models.length > 0) {
