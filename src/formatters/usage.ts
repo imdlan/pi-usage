@@ -111,35 +111,17 @@ function fmtNum(n?: number): string {
   return n === undefined || !Number.isFinite(n) ? "—" : String(n);
 }
 
-function isoLabel(iso?: string): string {
-  return iso && iso.length > 0 ? `${iso} (UTC)` : "—";
-}
-
-/** `2025-05-14T10:30:45.000Z (UTC)` -> `05-14 10:30 UTC` (keeps UTC). */
-function shortIso(iso?: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(iso ?? "");
-  return m ? `${m[2]}-${m[3]} ${m[4]}:${m[5]} UTC` : isoLabel(iso);
-}
-
-function localIso(iso?: string): string {
+/** `年-月-日 时:分:秒` in local time; single canonical format everywhere. */
+function fmtTime(iso?: string): string {
   if (!iso || iso.length === 0) return "—";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return isoLabel(iso);
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())} local`;
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
 }
 
-/** Human-ish relative time: "in 2h 13m" / "3m ago", or undefined. */
-function relativeIso(iso?: string, now: Date = new Date()): string | undefined {
-  if (!iso || iso.length === 0) return undefined;
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return undefined;
-  const diffMin = Math.round((t - now.getTime()) / 60000);
-  const abs = Math.abs(diffMin);
-  if (abs < 1) return diffMin >= 0 ? "now" : "now";
-  const h = Math.floor(abs / 60);
-  const m = abs % 60;
-  const span = h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ""}` : `${m}m`;
-  return diffMin >= 0 ? `in ${span}` : `${span} ago`;
+/** Format a epoch-milliseconds timestamp. */
+function fmtEpoch(ms: number): string {
+  return fmtTime(new Date(ms).toISOString());
 }
 
 /** One provider's compact status-line segment. */
@@ -182,7 +164,7 @@ export function formatProviderDetail(
     const name = nameOf(s, ctx);
     const stale = s.stale ? "  " + yellow("⚠ data may be stale") : "";
     lines.push(`${name}${stale}`);
-    lines.push(dim(`refreshed ${localIso(s.timestamp)}`));
+    lines.push(dim(`refreshed ${fmtTime(s.timestamp)}`));
     if (s.error) {
       const http = s.error.httpStatus ? ` (HTTP ${s.error.httpStatus})` : "";
       lines.push(red(`error: ${s.error.code} — ${s.error.message}${http}`));
@@ -295,14 +277,13 @@ function quotaRowCells(label: string, q: UsageQuota): string[] {
   if (q.used !== undefined && q.limit !== undefined) used = `${fmtNum(q.used)} / ${fmtNum(q.limit)}`;
   else if (q.used !== undefined) used = `used ${fmtNum(q.used)}`;
   else if (q.limit !== undefined) used = `limit ${fmtNum(q.limit)}`;
-  const rel = relativeIso(q.resetAt);
   return [
     label,
     q.percentage !== undefined ? bar(q.percentage) : "—",
     pctColor(q.percentage)(formatPct(q.percentage).padStart(3)),
     dim(used),
     q.remaining !== undefined ? dim(fmtNum(q.remaining)) : "—",
-    q.resetAt ? dim(`${shortIso(q.resetAt)}${rel ? ` (${rel})` : ""}`) : "—",
+    q.resetAt ? dim(fmtTime(q.resetAt)) : "—",
   ];
 }
 
@@ -327,7 +308,7 @@ function detailRowCells(d: UsageQuotaDetail): string[] {
 function renderUsageTable(s: UsageSnapshot, ctx: FormatContext | undefined, width: number | undefined): string[] {
   const name = nameOf(s, ctx);
   const stale = s.stale ? " ⚠ data may be stale" : "";
-  const titles = [`${name}${yellow(stale)}`, dim(`refreshed ${localIso(s.timestamp)}`)];
+  const titles = [`${name}${yellow(stale)}`, dim(`refreshed ${fmtTime(s.timestamp)}`)];
   if (s.error) {
     const http = s.error.httpStatus ? ` (HTTP ${s.error.httpStatus})` : "";
     titles.push(red(`error: ${s.error.code} — ${s.error.message}${http}`));
@@ -355,8 +336,7 @@ export function formatSummary(snapshots: readonly UsageSnapshot[], ctx?: FormatC
         .slice(0, 2)
         .map((q) => {
           const seg = `${shortLabel(q)} ${formatPct(q.percentage)}`;
-          const rel = relativeIso(q.resetAt);
-          return rel ? `${seg} ${dim(rel)}` : seg;
+          return q.resetAt ? `${seg} ${dim(fmtTime(q.resetAt))}` : seg;
         })
         .join(" · ");
       return `${head} — ${qs}${s.stale ? "  ·  ⚠ stale" : ""}`;
@@ -383,12 +363,12 @@ export function formatStatus(
   const rows: TableRow[] = cacheInfo.map((c) => {
     const name = ctx?.nameOf?.(c.id) ?? c.id;
     const state = c.hasError ? "error" : c.stale ? "stale" : c.cached ? "ok" : "not cached";
-    const fetched = c.fetchedAt !== undefined ? isoLabel(new Date(c.fetchedAt).toISOString()) : "—";
+    const fetched = c.fetchedAt !== undefined ? fmtEpoch(c.fetchedAt) : "—";
     return { cells: [`${name} (${c.id})`, state, fetched] };
   });
   const titles = [
     "Usage status",
-    `last refresh ${lastRefreshAt !== undefined ? isoLabel(new Date(lastRefreshAt).toISOString()) : "never"}`,
+    `last refresh ${lastRefreshAt !== undefined ? fmtEpoch(lastRefreshAt) : "never"}`,
     `status line  ${snapshots.length > 0 ? formatStatusLine(snapshots, ctx) : "(empty)"}`,
   ];
   if (rows.length === 0) {

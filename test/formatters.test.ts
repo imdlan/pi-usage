@@ -104,11 +104,12 @@ describe("formatProviderDetail", () => {
     assert.ok(hot.includes("\u001b[31m"), "high usage should be red");
   });
 
-  it("shows reset time with relative hint", () => {
+  it("shows reset time as datetime", () => {
     const future = new Date(Date.now() + 2 * 3600_000).toISOString();
     const s = snap({ quotas: [{ id: "five_hour", label: "5-hour quota", percentage: 10, resetAt: future }] });
     const out = stripAnsi(formatProviderDetail(s, ctx));
-    assert.match(out, /\d{2}-\d{2} \d{2}:\d{2} UTC \(in [\dhm ]+\)/);
+    assert.match(out, /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
+    assert.doesNotMatch(out, /UTC|\(in /);
   });
 
   it("marks stale data and shows errors", () => {
@@ -174,7 +175,7 @@ describe("formatSummary", () => {
     assert.match(out, /GLM \(zai\) — 5h 32% · MCP 18%/);
   });
 
-  it("shows relative reset time per quota when known", () => {
+  it("shows reset datetime per quota when known", () => {
     const future = new Date(Date.now() + 2 * 3600_000 + 13 * 60_000).toISOString();
     const month = new Date(Date.now() + 16 * 86400_000).toISOString();
     const s = snap({
@@ -184,8 +185,8 @@ describe("formatSummary", () => {
       ],
     });
     const out = stripAnsi(formatSummary([s], ctx));
-    assert.match(out, /5h 32% in 2h 13m/);
-    assert.match(out, /MCP 18% in 384h/);
+    assert.match(out, /5h 32% \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
+    assert.match(out, /MCP 18% \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
   });
 
   it("omits reset time when unknown", () => {
