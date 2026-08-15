@@ -1,16 +1,18 @@
 # pi-usage
 
-A [Pi Coding Agent](https://github.com/earendil-works/pi-coding-agent) extension that shows **AI provider usage and quota** inside Pi — via `/usage` commands and a compact status line.
+[English](./README.md) | [简体中文](./README.zh-CN.md)
 
-Currently supports **Z.ai / GLM Coding Plan**; architected to add more providers (OpenAI, Anthropic, OpenRouter) without touching the core.
+A [Pi Coding Agent](https://github.com/earendil-works/pi-coding-agent) extension that shows **AI provider usage and quota** inside Pi.
+
+Currently supports **Z.ai / GLM Coding Plan**; architected to add more providers without touching the core.
 
 ```
 /usage
-GLM/glm-4.7 (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% 2026-08-27 09:43:00
+GLM/glm-5.3 (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% 2026-08-27 09:43:00
 
 /usage zai
 +-------------------+--------------+-----+--------------+-------+---------------------+
-|                                         GLM/glm-4.7                                         |
+|                                         GLM/glm-5.3                                         |
 |                              refreshed 2026-08-15 09:43:00                                |
 +-------------------+--------------+-----+--------------+-------+---------------------+
 | Quota             | Usage        | Pct | Used         | Left  | Resets              |
@@ -21,15 +23,15 @@ GLM/glm-4.7 (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% 2026-08-27 09:43:00
 +-------------------+--------------+-----+--------------+-------+---------------------+
 
 Models (* = current):
-  * glm-4.7                  5000  (32%)
-    glm-4.6                   800  (5%)
+  * glm-5.3                  5000  (32%)
+    glm-5.2                   800  (5%)
 
-status line
-GLM/glm-4.7 · 5h 32% · MCP 18%
+status line (always auto-refreshed every 2 min)
+GLM/glm-5.3 · 5h 32% · MCP 18%
 
-/usage pin
+/usage pin (widget pinned above the editor, auto-refreshed)
 ┌─ pinned above the editor ────────────────────────────────┐
-│ GLM/glm-4.7 (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% …    │
+│ GLM/glm-5.3 (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% …    │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -39,46 +41,34 @@ GLM/glm-4.7 · 5h 32% · MCP 18%
 pi install npm:@imdlan/pi-usage
 ```
 
-Also available from git or a local clone:
-
-```bash
-pi install git:github.com/imdlan/pi-usage
-pi install ./path/to/pi-usage
-```
-
 Update with `pi update --extensions`; remove with `pi remove npm:@imdlan/pi-usage`.
 
-### Requirements
-
-- Node.js 20+
-- A configured Z.ai provider in Pi whose base URL points at an official Z.ai / GLM endpoint (e.g. `https://api.z.ai/api/anthropic`) and whose API key resolves to your GLM Coding Plan token.
+Requires Node.js 20+ and a configured Z.ai provider in Pi (base URL at an official Z.ai / GLM endpoint, API key resolving to your GLM Coding Plan token).
 
 ## Commands
 
-| Command | Behavior |
-| --- | --- |
-| `/usage` | Usage summary for all available providers, with each quota's reset time (`2026-08-15 11:43:00`, local time) when known. |
-| `/usage zai` | Detailed Z.ai / GLM usage as a responsive ASCII table: 5-hour quota, MCP monthly quota with per-tool breakdown, per-model usage, reset times. |
-| `/usage refresh` | Force-refresh, ignoring the cache. Keeps the last good snapshot on failure. |
-| `/usage status` | Status line content, last refresh, cache state, provider availability. |
-| `/usage pin` | Toggle the summary widget pinned above the editor, auto-refreshed every background cycle (~2 min). `pin on` / `pin off` set the state explicitly. |
+| Command | Behavior | Auto-refresh? |
+| --- | --- | --- |
+| `/usage` | Usage summary for all providers, with quota reset times (local time). | ❌ One-time snapshot |
+| `/usage zai` | Detailed Z.ai usage table: 5-hour quota, MCP monthly quota with per-tool breakdown, per-model usage. | ❌ |
+| `/usage refresh` | Force-refresh from the API, then render the summary. Keeps the last good snapshot on failure. | ❌ Renders once |
+| `/usage status` | Status line content, last refresh, cache state. | ❌ |
+| `/usage pin` | Pin the summary widget above the editor. `pin on` / `pin off` set it explicitly; `pin` toggles. | ✅ Every ~2 min |
 
-### Pinned widget
+**Key difference**: plain `/usage` is a static snapshot. Only a pinned widget (`/usage pin`) stays fresh, re-rendered from cache every background cycle (~2 min, no extra API calls). Pin state is per-session. The footer status line is always auto-refreshed regardless.
 
-By default the summary only appears when you run `/usage`. Run `/usage pin` (or `pin on`) to keep it **pinned above the editor** — the same multi-line summary as `/usage`, kept in sync by the background refresh (no extra API calls; it re-renders from cache). `/usage pin off` (or `pin` again) removes it. Pin state is per-session and resets on Pi restart. Note the pinned widget occupies ~1 line per provider at the top of the chat area.
+The detail table is width-aware: narrow terminals drop optional columns (`Resets` → `Left` → `Used` → `Usage` bar), never overflowing.
 
-The detail table is width-aware: narrow terminals drop optional columns (`Resets` → `Left` → `Used` → `Usage` bar), then truncate labels — never overflowing. The status line refreshes in the background every 2 minutes (cache TTL: 2 minutes) and degrades to `GLM · usage unavailable` when data is unavailable. It never blocks the UI or model requests.
+## Current model indicator
 
-### Current model indicator
-
-Wherever the provider name appears, the **currently active model id** is appended as `Name/model` (e.g. `GLM/glm-4.7`) — in the footer status line, the `/usage` summary, the pinned widget, and the detail table header. In the detail view's `Models` list, the current model is marked with `*`. The indicator follows model switches made via `/model`, cycling (`Ctrl+P`), or session restore. Provider matching is id-first with a host-allowlist fallback, so a GLM Coding Plan entry like `zai-coding-cn` maps onto the `zai` usage provider correctly. The active model is seeded from `ctx.model` at session start (the restore-time `model_select` may fire before the extension loads) and followed via the `model_select` event afterwards. The pinned widget is indented 1 cell from the left edge (`CONFIG.widget.leftPaddingSpaces`).
+Wherever the provider name appears, the active model id is appended as `Name/model` (e.g. `GLM/glm-5.3`) — footer, summary, pinned widget, and detail table header. It follows model switches via `/model`, cycling (`Ctrl+P`), or session restore.
 
 ## Security & privacy
 
-- **Read-only**: only queries usage; never modifies provider state.
-- **No secrets handled**: credentials resolve through Pi's authorized provider auth API (`getProviderAuth`). Never reads `auth.json`, `.env`, `~/.ssh`, or credential files; never runs subprocesses; fails closed when auth is unavailable.
-- **Locked-down networking**: HTTPS only, per-provider host allowlist (Z.ai: `api.z.ai`, `open.bigmodel.cn`, `dev.bigmodel.cn`), redirects rejected.
-- **No telemetry**; all output is sanitized — keys, tokens, cookies, and `Authorization` headers are never displayed.
+- **Read-only**: only queries usage.
+- **No secrets handled**: auth resolves through Pi's `getProviderAuth`; never reads credential files or runs subprocesses.
+- **Locked-down networking**: HTTPS only, host allowlist (`api.z.ai`, `open.bigmodel.cn`, `dev.bigmodel.cn`), redirects rejected.
+- **No telemetry**; all output sanitized.
 
 ## Development
 
@@ -88,32 +78,11 @@ npm run typecheck   # strict tsc
 npm test            # node:test via tsx
 ```
 
-Runtime dependencies: **zero** (Node built-ins + Pi Extension API only). Layout:
+Zero runtime dependencies (Node built-ins + Pi Extension API). Pi loads the TypeScript entry directly — no build step.
 
-```
-src/
-  index.ts            # Pi entry: commands, lifecycle, status line
-  config.ts           # defaults (TTL, timeout, allowlists)
-  providers/          # types, registry, zai adapter
-  services/           # refresh/cache, status line
-  formatters/         # command output, ASCII table renderer
-  utils/              # controlled fetch, time math, redaction
-test/                 # unit, provider, cache, command, security tests
-```
+Adding a provider: implement `UsageProvider` in `src/providers/<name>.ts` (auth strategy, allowlist, redaction rules), register in `registry.ts`, add tests (401/403/429/5xx, timeout, allowlist, redaction).
 
-Adding a provider: implement `UsageProvider` in `src/providers/<name>.ts` with its own auth strategy, allowlist, and redaction rules; register it in `registry.ts`; add tests (missing fields, 401/403/429/5xx, timeout, allowlist, redaction).
-
-### Publish
-
-```bash
-npm publish          # @imdlan/pi-usage, public scoped package
-```
-
-Pi loads the TypeScript entry directly (via `jiti`), so no build step is needed.
-
-## Z.ai integration notes
-
-The Z.ai adapter mirrors the official [`glm-plan-usage`](https://github.com/zai-org/zai-coding-plugins) plugin: it derives usage endpoints from the configured base URL origin and queries `model-usage`, `tool-usage`, and `quota/limit` (`TOKENS_LIMIT` = 5-hour quota, `TIME_LIMIT` = MCP monthly quota). These endpoints may change without notice; parsing is isolated in `src/providers/zai.ts`.
+The Z.ai adapter mirrors the official [`glm-plan-usage`](https://github.com/zai-org/zai-coding-plugins) plugin: endpoints derived from the configured base URL origin (`model-usage`, `tool-usage`, `quota/limit`). Parsing is isolated in `src/providers/zai.ts`.
 
 ## License
 

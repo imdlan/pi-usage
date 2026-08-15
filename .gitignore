@@ -5,6 +5,7 @@ node_modules/
 dist/
 build/
 *.tsbuildinfo
+*.tgz
 
 # Logs
 *.log
@@ -14,6 +15,7 @@ logs/
 .env
 .env.*
 !.env.example
+.npmrc
 
 # Test artifacts & recordings
 coverage/
