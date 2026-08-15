@@ -19,6 +19,8 @@ import { CONFIG } from "./config.js";
 import { routeUsageCommand } from "./commands.js";
 import { formatProviderDetail, formatStatus, formatSummary } from "./formatters/usage.js";
 import type { FormatContext } from "./formatters/usage.js";
+import { createDeepSeekProvider, DEEPSEEK_ALLOWED_HOSTS } from "./providers/deepseek.js";
+import { createOpenRouterProvider, OPENROUTER_ALLOWED_HOSTS } from "./providers/openrouter.js";
 import { ProviderRegistry } from "./providers/registry.js";
 import type { ProviderAuth, UsageSnapshot } from "./providers/types.js";
 import { createZaiProvider, ZAI_ALLOWED_HOSTS } from "./providers/zai.js";
@@ -27,22 +29,34 @@ import { UsageService } from "./services/usage-service.js";
 
 const WIDGET_KEY = "pi-usage";
 
+/** Map usage provider id -> the hosts its Pi provider entry may point at.
+ * Used both for auth resolution and for active-model matching. */
+const PROVIDER_HOSTS: Readonly<Record<string, readonly string[]>> = {
+  zai: ZAI_ALLOWED_HOSTS,
+  deepseek: DEEPSEEK_ALLOWED_HOSTS,
+  openrouter: OPENROUTER_ALLOWED_HOSTS,
+};
+
 /**
- * Build a Z.ai auth resolver backed by Pi's authorized `getProviderAuth`.
+ * Build a host-allowlist auth resolver backed by Pi's authorized
+ * `getProviderAuth`.
  *
  * Candidate providers are discovered from the FULL model catalog via
  * `getAll()`, NOT from `getRegisteredProviderIds()`. The latter only lists
- * providers registered by *extensions* (e.g. the bundled `llama.cpp`), so a
- * normally-configured provider such as the GLM Coding Plan (`zai-coding-cn`),
- * which is registered through models config + catalog cache, is never listed
- * and the resolver would silently miss it.
+ * providers registered by *extensions*, so a normally-configured provider
+ * (e.g. `zai-coding-cn` or a custom DeepSeek entry), which is registered
+ * through models config + catalog cache, is never listed and the resolver
+ * would silently miss it.
  *
  * Every model carries both its `provider` id and `baseUrl`, which is enough to
- * locate any Z.ai-configured provider while staying within the host allowlist
- * (fail-closed). Returns undefined when none is available. Never reads
- * credential files or env vars directly.
+ * locate any configured provider whose host is on the allowlist (fail-closed).
+ * Returns undefined when none is available. Never reads credential files or
+ * env vars directly.
  */
-function createZaiAuthResolver(ctx: ExtensionContext): () => Promise<ProviderAuth | undefined> {
+function createHostAuthResolver(
+  ctx: ExtensionContext,
+  allowedHosts: readonly string[],
+): () => Promise<ProviderAuth | undefined> {
   const registry = ctx.modelRegistry;
   return async () => {
     let models: readonly { provider: string; baseUrl: string }[];
@@ -64,7 +78,7 @@ function createZaiAuthResolver(ctx: ExtensionContext): () => Promise<ProviderAut
       } catch {
         continue;
       }
-      if (!(ZAI_ALLOWED_HOSTS as readonly string[]).includes(host)) continue;
+      if (!(allowedHosts as readonly string[]).includes(host)) continue;
       seen.add(m.provider);
       candidates.push({ providerId: m.provider, baseUrl: m.baseUrl });
     }
@@ -115,22 +129,20 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
   }
 
   /** Resolve the active model id for a usage provider id. Matches the exact
-   * Pi provider id first, then falls back to a host-allowlist match so a GLM
-   * Coding Plan entry like `zai-coding-cn` maps onto the `zai` provider. */
+   * Pi provider id first, then falls back to a host-allowlist match so an entry
+   * like `zai-coding-cn` maps onto the `zai` usage provider. */
   function activeModelFor(providerId: string): string | undefined {
     if (!currentModel) return undefined;
     if (currentModel.provider === providerId) return currentModel.id;
-    if (currentModel.baseUrl === undefined) return undefined;
+    const hosts = PROVIDER_HOSTS[providerId];
+    if (!hosts || currentModel.baseUrl === undefined) return undefined;
     let host: string;
     try {
       host = new URL(currentModel.baseUrl).hostname;
     } catch {
       return undefined;
     }
-    if (providerId === "zai" && (ZAI_ALLOWED_HOSTS as readonly string[]).includes(host)) {
-      return currentModel.id;
-    }
-    return undefined;
+    return hosts.includes(host) ? currentModel.id : undefined;
   }
 
   function fmtCtx(): FormatContext {
@@ -211,7 +223,13 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
       };
     }
     registry = new ProviderRegistry();
-    registry.register(createZaiProvider({ resolveAuth: createZaiAuthResolver(ctx) }));
+    registry.register(createZaiProvider({ resolveAuth: createHostAuthResolver(ctx, ZAI_ALLOWED_HOSTS) }));
+    registry.register(
+      createDeepSeekProvider({ resolveAuth: createHostAuthResolver(ctx, DEEPSEEK_ALLOWED_HOSTS) }),
+    );
+    registry.register(
+      createOpenRouterProvider({ resolveAuth: createHostAuthResolver(ctx, OPENROUTER_ALLOWED_HOSTS) }),
+    );
     service = new UsageService({ registry });
     statusLine = new StatusLineService(
       { setStatus: (k, t) => ctx.ui.setStatus(k, t) },

@@ -4,7 +4,15 @@
 
 A [Pi Coding Agent](https://github.com/earendil-works/pi-coding-agent) extension that shows **AI provider usage and quota** inside Pi.
 
-Currently supports **Z.ai / GLM Coding Plan**; architected to add more providers without touching the core.
+Supports **Z.ai / GLM Coding Plan**, **DeepSeek**, and **OpenRouter**. Each provider only appears when a matching one is configured in Pi.
+
+> **Honesty about API stability**: this extension actively queries each provider's usage endpoints.
+>
+> - **DeepSeek** (`GET /user/balance`) and **OpenRouter** (`GET /api/v1/credits`) are **official documented APIs** — stable, but their fields may still evolve.
+> - **Z.ai** endpoints (`model-usage`, `tool-usage`, `quota/limit`) are **undocumented**: derived from the official `glm-plan-usage` plugin and may change without notice.
+> - **OpenAI / Anthropic / Google Gemini are NOT supported**: their usage APIs require organization **admin keys** that are never used as chat provider keys, and Gemini exposes no API-key quota endpoint at all. Plugins that show Claude Code subscription quota parse local logs — an approach pi-usage deliberately avoids (it never reads local files).
+>
+> If an endpoint breaks, the extension degrades gracefully (`usage unavailable`) and never affects model requests.
 
 ```
 /usage
@@ -43,7 +51,11 @@ pi install npm:@imdlan/pi-usage
 
 Update with `pi update --extensions`; remove with `pi remove npm:@imdlan/pi-usage`.
 
-Requires Node.js 20+ and a configured Z.ai provider in Pi (base URL at an official Z.ai / GLM endpoint, API key resolving to your GLM Coding Plan token).
+Requires Node.js 20+ and at least one supported provider configured in Pi:
+
+- **Z.ai / GLM Coding Plan** — base URL at an official Z.ai / GLM endpoint, API key resolving to your GLM Coding Plan token.
+- **DeepSeek** — base URL at `https://api.deepseek.com`, standard API key.
+- **OpenRouter** — base URL at `https://openrouter.ai`, standard `sk-or-v1-...` key.
 
 ## Commands
 
@@ -51,6 +63,8 @@ Requires Node.js 20+ and a configured Z.ai provider in Pi (base URL at an offici
 | --- | --- | --- |
 | `/usage` | Usage summary for all providers, with quota reset times (local time). | ❌ One-time snapshot |
 | `/usage zai` | Detailed Z.ai usage table: 5-hour quota, MCP monthly quota with per-tool breakdown, per-model usage. | ❌ |
+| `/usage deepseek` | DeepSeek balance per currency (CNY/USD) with granted / topped-up breakdown. | ❌ |
+| `/usage openrouter` | OpenRouter credits: total purchased, total spent, remaining (USD). | ❌ |
 | `/usage refresh` | Force-refresh from the API, then render the summary. Keeps the last good snapshot on failure. | ❌ Renders once |
 | `/usage status` | Status line content, last refresh, cache state. | ❌ |
 | `/usage pin` | Pin the summary widget above the editor. `pin on` / `pin off` set it explicitly; `pin` toggles. | ✅ Every ~2 min |
@@ -80,7 +94,7 @@ npm test            # node:test via tsx
 
 Zero runtime dependencies (Node built-ins + Pi Extension API). Pi loads the TypeScript entry directly — no build step.
 
-Adding a provider: implement `UsageProvider` in `src/providers/<name>.ts` (auth strategy, allowlist, redaction rules), register in `registry.ts`, add tests (401/403/429/5xx, timeout, allowlist, redaction).
+Adding a provider: implement `UsageProvider` in `src/providers/<name>.ts` (auth strategy, allowlist, redaction rules), register in `registry.ts` + `PROVIDER_HOSTS` in `index.ts`, add tests (401/403/429/5xx, timeout, allowlist, redaction).
 
 The Z.ai adapter mirrors the official [`glm-plan-usage`](https://github.com/zai-org/zai-coding-plugins) plugin: endpoints derived from the configured base URL origin (`model-usage`, `tool-usage`, `quota/limit`). Parsing is isolated in `src/providers/zai.ts`.
 
