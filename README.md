@@ -98,6 +98,12 @@ Adding a provider: implement `UsageProvider` in `src/providers/<name>.ts` (auth 
 
 The Z.ai adapter mirrors the official [`glm-plan-usage`](https://github.com/zai-org/zai-coding-plugins) plugin: endpoints derived from the configured base URL origin (`model-usage`, `tool-usage`, `quota/limit`). Parsing is isolated in `src/providers/zai.ts`.
 
+## Trademarks & disclaimer
+
+- This project is **not affiliated with, endorsed by, or sponsored by** Z.ai / Zhipu AI, DeepSeek, OpenRouter, or any other provider. Provider names and trademarks belong to their respective owners and are used only to identify the services being queried (nominative fair use).
+- Usage queries are made **read-only, with the credentials Pi already holds for the user's own account**, at a low fixed rate (every 2 minutes). It is the user's responsibility to comply with each provider's terms of service.
+- The Z.ai adapter references endpoint behavior of the upstream [`glm-plan-usage`](https://github.com/zai-org/zai-coding-plugins) plugin (Apache-2.0, Zhipu AI). No upstream code is included in this repository.
+
 ## License
 
 [Apache-2.0](./LICENSE). Copyright © 2026 imdlan.

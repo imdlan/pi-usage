@@ -98,6 +98,12 @@ npm test            # node:test via tsx
 
 Z.ai 适配器参照官方 [`glm-plan-usage`](https://github.com/zai-org/zai-coding-plugins) 插件实现：端点从配置的 base URL origin 推导（`model-usage`、`tool-usage`、`quota/limit`）。解析逻辑隔离在 `src/providers/zai.ts`。
 
+## 商标与免责声明
+
+- 本项目**与 Z.ai / 智谱、DeepSeek、OpenRouter 或任何其他供应商无隶属、无合作、未受其背书或赞助**。各供应商名称与商标归其所有者所有，仅用于指明所查询的服务（指明性合理使用）。
+- 用量查询均为**只读**，使用 Pi 已持有的用户本人账号凭证，低频固定频率（每 2 分钟一次）。遵守各供应商服务条款是用户自身的责任。
+- Z.ai 适配器参照上游 [`glm-plan-usage`](https://github.com/zai-org/zai-coding-plugins) 插件（Apache-2.0，智谱）的端点行为实现，本仓库不包含任何上游代码。
+
 ## 许可证
 
 [Apache-2.0](./LICENSE). Copyright © 2026 imdlan.
