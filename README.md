@@ -117,7 +117,7 @@ The table is width-aware and re-renders on terminal resize: narrower terminals d
 A compact line is written to Pi's footer, for example:
 
 ```
-GLM · 5h 32% · mcp 18%
+GLM · 5h 32% · MCP 18%
 ```
 
 When data is unavailable it degrades to:
