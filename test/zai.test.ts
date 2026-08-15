@@ -36,6 +36,23 @@ function quotaBody(limits: unknown[]): unknown {
 }
 
 describe("ZaiProvider - happy path", () => {
+  it("orders quotas deterministically regardless of API array order", async () => {
+    const provider = createZaiProvider({
+      resolveAuth: async () => AUTH,
+      now: () => FIXED,
+      fetchImpl: makeFetch((url) => {
+        if (url.includes("/quota/limit"))
+          return res(200, quotaBody([
+            { type: "TIME_LIMIT", percentage: 18, currentValue: 5000, usage: 28000 },
+            { type: "TOKENS_LIMIT", percentage: 32 },
+          ]));
+        return res(404, {});
+      }),
+    });
+    const snap = await provider.getUsage();
+    assert.deepEqual(snap.quotas.map((q) => q.id), ["five_hour", "monthly"]);
+  });
+
   it("parses quotas and models", async () => {
     const provider = createZaiProvider({
       resolveAuth: async () => AUTH,

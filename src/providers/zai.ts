@@ -132,7 +132,13 @@ function parseQuotaLimit(payload: unknown): UsageQuota[] {
       out.push({ id: slug(type), label: type, percentage: pct });
     }
   }
-  return out;
+  // Deterministic display order regardless of API array order: 5-hour quota
+  // first, then MCP monthly, then any future quota types in arrival order.
+  const rank = (q: UsageQuota) => (q.id === "five_hour" ? 0 : q.id === "monthly" ? 1 : 2);
+  return out
+    .map((q, i) => ({ q, i }))
+    .sort((a, b) => rank(a.q) - rank(b.q) || a.i - b.i)
+    .map(({ q }) => q);
 }
 
 /**
