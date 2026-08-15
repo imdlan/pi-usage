@@ -1,6 +1,6 @@
 {
   "name": "@imdlan/pi-usage",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Pi Coding Agent extension to view usage and quota for multiple AI providers. Ships with Z.ai / GLM Coding Plan support; architected to extend to OpenAI, Anthropic, OpenRouter and more.",
   "type": "module",
   "keywords": [
