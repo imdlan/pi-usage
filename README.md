@@ -71,7 +71,7 @@ The detail table is width-aware: narrow terminals drop optional columns (`Resets
 
 ### Current model indicator
 
-Wherever the provider name appears, the **currently active model id** is appended as `Name/model` (e.g. `GLM/glm-4.7`) — in the footer status line, the `/usage` summary, the pinned widget, and the detail table header. In the detail view's `Models` list, the current model is marked with `*`. The indicator follows model switches made via `/model`, cycling (`Ctrl+P`), or session restore. Provider matching is id-first with a host-allowlist fallback, so a GLM Coding Plan entry like `zai-coding-cn` maps onto the `zai` usage provider correctly. The pinned widget is indented 2 cells from the left edge (`CONFIG.widget.leftPaddingSpaces`).
+Wherever the provider name appears, the **currently active model id** is appended as `Name/model` (e.g. `GLM/glm-4.7`) — in the footer status line, the `/usage` summary, the pinned widget, and the detail table header. In the detail view's `Models` list, the current model is marked with `*`. The indicator follows model switches made via `/model`, cycling (`Ctrl+P`), or session restore. Provider matching is id-first with a host-allowlist fallback, so a GLM Coding Plan entry like `zai-coding-cn` maps onto the `zai` usage provider correctly. The active model is seeded from `ctx.model` at session start (the restore-time `model_select` may fire before the extension loads) and followed via the `model_select` event afterwards. The pinned widget is indented 1 cell from the left edge (`CONFIG.widget.leftPaddingSpaces`).
 
 ## Security & privacy
 

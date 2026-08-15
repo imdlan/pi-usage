@@ -101,6 +101,19 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
    * provider entry id (`zai-coding-cn`). */
   let currentModel: { provider: string; id: string; baseUrl?: string } | undefined;
 
+  /** Resolve a model's baseUrl from the full catalog (first match on
+   * provider id + model id). The event payload does not guarantee baseUrl. */
+  function lookupBaseUrl(ctx: ExtensionContext, provider: string, id: string): string | undefined {
+    try {
+      const m = ctx.modelRegistry.getAll().find(
+        (m) => m.provider === provider && m.id === id,
+      );
+      return m && typeof m.baseUrl === "string" ? m.baseUrl : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   /** Resolve the active model id for a usage provider id. Matches the exact
    * Pi provider id first, then falls back to a host-allowlist match so a GLM
    * Coding Plan entry like `zai-coding-cn` maps onto the `zai` provider. */
@@ -186,6 +199,17 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
 
   pi.on("session_start", (event, ctx) => {
     uiCtx = ctx;
+    // Seed the active model from ctx.model — model_select for the initial
+    // session restore may have fired before this extension finished loading.
+    const m = ctx.model;
+    if (m && typeof m.provider === "string" && typeof m.id === "string") {
+      currentModel = {
+        provider: m.provider,
+        id: m.id,
+        baseUrl:
+          typeof m.baseUrl === "string" ? m.baseUrl : lookupBaseUrl(ctx, m.provider, m.id),
+      };
+    }
     registry = new ProviderRegistry();
     registry.register(createZaiProvider({ resolveAuth: createZaiAuthResolver(ctx) }));
     service = new UsageService({ registry });
@@ -213,11 +237,14 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
   // Track the active model so the footer, summary, and detail views can show
   // `Name/model`. Re-render from cache on change so the footer follows switches
   // made via /model, cycling (Ctrl+P), or session restore.
-  pi.on("model_select", (event) => {
+  pi.on("model_select", (event, ctx) => {
     currentModel = {
       provider: event.model.provider,
       id: event.model.id,
-      baseUrl: typeof event.model.baseUrl === "string" ? event.model.baseUrl : undefined,
+      baseUrl:
+        typeof event.model.baseUrl === "string"
+          ? event.model.baseUrl
+          : lookupBaseUrl(ctx, event.model.provider, event.model.id),
     };
     if (!service || !statusLine) return;
     void (async () => {

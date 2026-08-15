@@ -27,8 +27,7 @@ export const CONFIG = {
     maxLength: 100,
   },
   widget: {
-    /** Left indent (terminal cells) for the pinned widget above the editor.
-     * 2 cells ≈ 8–18px at typical terminal font sizes. */
-    leftPaddingSpaces: 2,
+    /** Left indent (terminal cells) for the pinned widget above the editor. */
+    leftPaddingSpaces: 1,
   },
 } as const;
