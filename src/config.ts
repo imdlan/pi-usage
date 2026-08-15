@@ -26,4 +26,9 @@ export const CONFIG = {
      * `Name/model` prefixes plus quota segments across a few providers. */
     maxLength: 100,
   },
+  widget: {
+    /** Left indent (terminal cells) for the pinned widget above the editor.
+     * 2 cells ≈ 8–18px at typical terminal font sizes. */
+    leftPaddingSpaces: 2,
+  },
 } as const;

@@ -95,14 +95,35 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
   let uiCtx: ExtensionContext | undefined;
   /** Whether the summary widget is pinned above the editor and kept fresh. */
   let pinned = false;
-  /** Currently active model, tracked via model_select (set/cycle/restore). */
-  let currentModel: { provider: string; id: string } | undefined;
+  /** Currently active model, tracked via model_select (set/cycle/restore).
+   * Includes the model's baseUrl so provider matching can fall back to host
+   * allowlist comparison — the usage registry id (`zai`) does not equal Pi's
+   * provider entry id (`zai-coding-cn`). */
+  let currentModel: { provider: string; id: string; baseUrl?: string } | undefined;
+
+  /** Resolve the active model id for a usage provider id. Matches the exact
+   * Pi provider id first, then falls back to a host-allowlist match so a GLM
+   * Coding Plan entry like `zai-coding-cn` maps onto the `zai` provider. */
+  function activeModelFor(providerId: string): string | undefined {
+    if (!currentModel) return undefined;
+    if (currentModel.provider === providerId) return currentModel.id;
+    if (currentModel.baseUrl === undefined) return undefined;
+    let host: string;
+    try {
+      host = new URL(currentModel.baseUrl).hostname;
+    } catch {
+      return undefined;
+    }
+    if (providerId === "zai" && (ZAI_ALLOWED_HOSTS as readonly string[]).includes(host)) {
+      return currentModel.id;
+    }
+    return undefined;
+  }
 
   function fmtCtx(): FormatContext {
     return {
       nameOf: (id) => registry?.get(id)?.name ?? id,
-      currentModelOf: (id) =>
-        currentModel && currentModel.provider === id ? currentModel.id : undefined,
+      currentModelOf: activeModelFor,
     };
   }
 
@@ -112,8 +133,12 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
     const ctx = uiCtx;
     if (!ctx) return;
     if (ctx.hasUI) {
+      const pad = CONFIG.widget.leftPaddingSpaces;
       ctx.ui.setWidget(WIDGET_KEY, () => ({
-        render: (width: number) => build(width).split("\n"),
+        render: (width: number) =>
+          build(Math.max(0, width - pad))
+            .split("\n")
+            .map((l) => " ".repeat(pad) + l),
         invalidate: () => {},
       }));
     } else {
@@ -189,7 +214,11 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
   // `Name/model`. Re-render from cache on change so the footer follows switches
   // made via /model, cycling (Ctrl+P), or session restore.
   pi.on("model_select", (event) => {
-    currentModel = { provider: event.model.provider, id: event.model.id };
+    currentModel = {
+      provider: event.model.provider,
+      id: event.model.id,
+      baseUrl: typeof event.model.baseUrl === "string" ? event.model.baseUrl : undefined,
+    };
     if (!service || !statusLine) return;
     void (async () => {
       await statusLine.update(service).catch(() => undefined);
