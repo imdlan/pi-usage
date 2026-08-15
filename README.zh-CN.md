@@ -6,11 +6,11 @@
 
 支持 **Z.ai / GLM Coding Plan**、**DeepSeek** 和 **OpenRouter**。仅在 Pi 中配置了对应供应商时才会出现。
 
-> **关于 API 稳定性的诚实说明**：本扩展会主动调用各供应商的用量查询接口。
+> **关于 API 稳定性的诚实说明**：本扩展会主动调用各供应商的用量查询接口。设计原则：**只用官方公开文档接口**，且**多供应商架构**——在 Pi 里配置了哪些供应商就显示哪些。
 >
-> - **DeepSeek**（`GET /user/balance`）与 **OpenRouter**（`GET /api/v1/credits`）为**官方公开文档接口**——稳定，但字段仍可能演进。
+> - **DeepSeek**（`GET /user/balance`）与 **OpenRouter**（`GET /api/v1/key`、`GET /api/v1/credits`）为**官方公开文档接口**——稳定，但字段仍可能演进。
 > - **Z.ai** 接口（`model-usage`、`tool-usage`、`quota/limit`）**无官方文档**：参照官方 `glm-plan-usage` 插件推导，可能随时变更。
-> - **暂不支持 OpenAI / Anthropic / Google Gemini**：其用量 API 需要组织级 **admin key**（不会用作对话 provider 的 key），且 Gemini 没有任何基于 API key 的配额查询接口。市面上显示 Claude Code 订阅额度的插件是解析本地日志实现的——pi-usage 刻意不采用（绝不读取本地文件）。
+> - **暂不支持 OpenAI / Anthropic / Google Gemini**：同类插件查订阅额度用的是**无文档私有 API**（从官方 CLI 逆向而来），随时可能失效或被封——本项目刻意不承担此风险；而各家 admin 用量 API 又需要组织级 admin key（不会用作对话 provider 的 key）。
 >
 > 接口失效时优雅降级（`usage unavailable`），不影响模型请求。
 
@@ -64,7 +64,7 @@ pi install npm:@imdlan/pi-usage
 | `/usage` | 所有供应商的用量摘要，含配额重置时间（本地时间）。 | ❌ 一次性快照 |
 | `/usage zai` | Z.ai 详细用量表：5 小时配额、MCP 月度配额（含分工具明细）、分模型用量。 | ❌ |
 | `/usage deepseek` | DeepSeek 按币种余额（CNY/USD），含赠送/充值明细。 | ❌ |
-| `/usage openrouter` | OpenRouter 积分：已购总额、已用、剩余（USD）。 | ❌ |
+| `/usage openrouter` | OpenRouter key 消费上限（已用/剩余/重置）+ 日/周/月花费 + 账户积分余额（USD）。 | ❌ |
 | `/usage refresh` | 强制从 API 拉取最新数据后渲染摘要。失败时保留最后一次有效快照。 | ❌ 仅渲染一次 |
 | `/usage status` | 状态栏内容、上次刷新时间、缓存状态。 | ❌ |
 | `/usage pin` | 将摘要 widget 固定在编辑器上方。`pin on` / `pin off` 显式设置；`pin` 切换。 | ✅ 约每 2 分钟 |

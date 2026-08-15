@@ -4,10 +4,16 @@
 /**
  * OpenRouter usage provider.
  *
- * Queries `GET /api/v1/credits` with the provider's standard API key
- * (sk-or-v1-...). Confirmed response shape (OpenRouter docs / SDK types):
- *   { data: { total_credits: number, total_usage: number } }  // USD amounts
- * Balance = total_credits - total_usage. Values are cached ~60s upstream.
+ * Queries two official documented endpoints with the provider's standard API
+ * key (sk-or-v1-...):
+ *
+ * 1. `GET /api/v1/key` (primary) — per-key spend cap and usage windows:
+ *    { data: { label, usage, usage_daily, usage_weekly, usage_monthly,
+ *              limit, limit_remaining, limit_reset, is_free_tier, rate_limit } }
+ *    All amounts in USD. `limit` is null when no per-key spend cap is set.
+ *
+ * 2. `GET /api/v1/credits` (fallback) — account balance:
+ *    { data: { total_credits, total_usage } }  // USD; values cached ~60s
  *
  * SECURITY: the API key is used only in an Authorization header for the
  * allowlisted HTTPS host. It never reaches snapshots, logs, or errors.
@@ -22,6 +28,7 @@ import type {
   UsageError,
   UsageProvider,
   UsageQuota,
+  UsageQuotaDetail,
   UsageRefreshOptions,
   UsageSnapshot,
 } from "./types.js";
@@ -29,7 +36,7 @@ import type {
 /** Official OpenRouter API host allowlist. */
 export const OPENROUTER_ALLOWED_HOSTS = ["openrouter.ai"] as const;
 
-/** Credits API path (relative to the base URL origin). */
+const OPENROUTER_KEY_PATH = "/api/v1/key";
 const OPENROUTER_CREDITS_PATH = "/api/v1/credits";
 
 export interface OpenRouterProviderDeps {
@@ -63,7 +70,44 @@ async function safeResolveAuth(
   }
 }
 
-/** Parse the credits response `{ data: { total_credits, total_usage } }`. */
+/** Parse the `/api/v1/key` payload into per-key spend cap + usage windows. */
+export function parseKeyPayload(payload: unknown): UsageQuota[] {
+  const root =
+    payload && typeof payload === "object" && "data" in payload
+      ? (payload as { data: unknown }).data
+      : payload;
+  if (!root || typeof root !== "object") return [];
+  const d = root as Record<string, unknown>;
+
+  const quotas: UsageQuota[] = [];
+  const limit = toNum(d.limit);
+  const remaining = toNum(d.limit_remaining);
+  const resetAt = typeof d.limit_reset === "string" && d.limit_reset.length > 0 ? d.limit_reset : undefined;
+  if (limit !== undefined) {
+    quotas.push({
+      id: "key_limit",
+      label: "Key spend cap (USD)",
+      used: remaining !== undefined ? Math.max(0, limit - remaining) : undefined,
+      limit,
+      remaining,
+      percentage: remaining !== undefined ? computePercentage(Math.max(0, limit - remaining), limit) : undefined,
+      resetAt,
+    });
+  }
+  const daily = toNum(d.usage_daily);
+  const weekly = toNum(d.usage_weekly);
+  const monthly = toNum(d.usage_monthly);
+  if (daily !== undefined || weekly !== undefined || monthly !== undefined) {
+    const details: UsageQuotaDetail[] = [];
+    if (daily !== undefined) details.push({ id: "daily", label: "today", used: daily });
+    if (weekly !== undefined) details.push({ id: "weekly", label: "this week", used: weekly });
+    if (monthly !== undefined) details.push({ id: "monthly", label: "this month", used: monthly });
+    quotas.push({ id: "usage_windows", label: "Spend (USD)", details });
+  }
+  return quotas;
+}
+
+/** Parse the `/api/v1/credits` payload: `{ data: { total_credits, total_usage } }`. */
 export function parseCredits(payload: unknown): UsageQuota[] {
   const root =
     payload && typeof payload === "object" && "data" in payload
@@ -74,14 +118,13 @@ export function parseCredits(payload: unknown): UsageQuota[] {
   const credits = toNum(item.total_credits);
   const usage = toNum(item.total_usage);
   if (credits === undefined && usage === undefined) return [];
-  const remaining = computeRemaining(credits, usage);
   return [
     {
       id: "credits",
       label: "Credits (USD)",
       used: usage,
       limit: credits,
-      remaining,
+      remaining: computeRemaining(credits, usage),
       percentage: computePercentage(usage, credits),
     },
   ];
@@ -130,21 +173,32 @@ export function createOpenRouterProvider(deps: OpenRouterProviderDeps): UsagePro
       return buildSnapshot(now, [], toUsageError(UsageErrorCode.UnsafeUrl, "invalid OpenRouter base url"));
     }
 
-    const res = await controlledGetJson({
-      url: `${origin}${OPENROUTER_CREDITS_PATH}`,
+    const reqOpts = {
       headers: { Authorization: `Bearer ${auth.apiKey}`, Accept: "application/json" },
       allowlist: OPENROUTER_ALLOWED_HOSTS as readonly string[],
       timeoutMs,
       fetchImpl: deps.fetchImpl,
       signal: deps.signal,
-    });
+    } as const;
 
-    if (!res.ok) return buildSnapshot(now, [], res.error);
-    const quotas = parseCredits(res.data);
-    if (quotas.length === 0) {
-      return buildSnapshot(now, [], toUsageError(UsageErrorCode.Schema, "credits response missing fields"));
+    const [keyRes, creditsRes] = await Promise.all([
+      controlledGetJson({ url: `${origin}${OPENROUTER_KEY_PATH}`, ...reqOpts }),
+      controlledGetJson({ url: `${origin}${OPENROUTER_CREDITS_PATH}`, ...reqOpts }),
+    ]);
+
+    const keyQuotas = keyRes.ok ? parseKeyPayload(keyRes.data) : [];
+    const creditQuotas = creditsRes.ok ? parseCredits(creditsRes.data) : [];
+
+    // `/key` carries the headline numbers (spend cap + usage windows); its
+    // failure is a hard error unless `/credits` still produced data.
+    if (keyRes.ok && keyQuotas.length === 0) {
+      return buildSnapshot(now, [], toUsageError(UsageErrorCode.Schema, "key response missing fields"));
     }
-    return buildSnapshot(now, quotas, undefined);
+    const quotas = [...keyQuotas, ...creditQuotas];
+    if (quotas.length > 0) return buildSnapshot(now, quotas, undefined);
+    // Both unavailable or empty: prefer the key endpoint's error.
+    const err: UsageError | undefined = !keyRes.ok ? keyRes.error : creditsRes.ok ? undefined : creditsRes.error;
+    return buildSnapshot(now, [], err ?? toUsageError(UsageErrorCode.Schema, "no usage data returned"));
   }
 
   return { id, name, isAvailable, getUsage };

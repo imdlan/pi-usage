@@ -6,11 +6,11 @@ A [Pi Coding Agent](https://github.com/earendil-works/pi-coding-agent) extension
 
 Supports **Z.ai / GLM Coding Plan**, **DeepSeek**, and **OpenRouter**. Each provider only appears when a matching one is configured in Pi.
 
-> **Honesty about API stability**: this extension actively queries each provider's usage endpoints.
+> **Honesty about API stability**: this extension actively queries each provider's usage endpoints. Design principles: **officially documented APIs only**, and **multi-provider by design** — whichever providers you configure in Pi are the ones shown.
 >
-> - **DeepSeek** (`GET /user/balance`) and **OpenRouter** (`GET /api/v1/credits`) are **official documented APIs** — stable, but their fields may still evolve.
+> - **DeepSeek** (`GET /user/balance`) and **OpenRouter** (`GET /api/v1/key`, `GET /api/v1/credits`) are **official documented APIs** — stable, but their fields may still evolve.
 > - **Z.ai** endpoints (`model-usage`, `tool-usage`, `quota/limit`) are **undocumented**: derived from the official `glm-plan-usage` plugin and may change without notice.
-> - **OpenAI / Anthropic / Google Gemini are NOT supported**: their usage APIs require organization **admin keys** that are never used as chat provider keys, and Gemini exposes no API-key quota endpoint at all. Plugins that show Claude Code subscription quota parse local logs — an approach pi-usage deliberately avoids (it never reads local files).
+> - **OpenAI / Anthropic / Google Gemini are NOT supported**: subscription-quota endpoints used by some plugins are **undocumented private APIs** (reverse-engineered from official CLIs) that can break or be blocked at any time — that risk is deliberately not taken here. Their admin usage APIs, in turn, require organization admin keys that are never used as chat provider keys.
 >
 > If an endpoint breaks, the extension degrades gracefully (`usage unavailable`) and never affects model requests.
 
@@ -64,7 +64,7 @@ Requires Node.js 20+ and at least one supported provider configured in Pi:
 | `/usage` | Usage summary for all providers, with quota reset times (local time). | ❌ One-time snapshot |
 | `/usage zai` | Detailed Z.ai usage table: 5-hour quota, MCP monthly quota with per-tool breakdown, per-model usage. | ❌ |
 | `/usage deepseek` | DeepSeek balance per currency (CNY/USD) with granted / topped-up breakdown. | ❌ |
-| `/usage openrouter` | OpenRouter credits: total purchased, total spent, remaining (USD). | ❌ |
+| `/usage openrouter` | OpenRouter key spend cap (used/remaining/reset) plus daily/weekly/monthly spend and account credits balance (USD). | ❌ |
 | `/usage refresh` | Force-refresh from the API, then render the summary. Keeps the last good snapshot on failure. | ❌ Renders once |
 | `/usage status` | Status line content, last refresh, cache state. | ❌ |
 | `/usage pin` | Pin the summary widget above the editor. `pin on` / `pin off` set it explicitly; `pin` toggles. | ✅ Every ~2 min |
