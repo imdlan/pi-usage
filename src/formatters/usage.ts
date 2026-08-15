@@ -77,19 +77,38 @@ function pad(s: string, n: number): string {
   return s.length >= n ? s : s + " ".repeat(n - s.length);
 }
 
-function fmtNum(n?: number): string {
-  return n === undefined || !Number.isFinite(n) ? "—" : String(n);
+/** Visible length, ignoring ANSI escapes (assumes single-width code points). */
+function visLen(s: string): number {
+  return stripAnsi(s).length;
 }
 
-function detailParts(d: UsageQuotaDetail): string {
-  const parts: string[] = [];
-  if (d.used !== undefined && d.limit !== undefined) parts.push(`used ${fmtNum(d.used)} / ${fmtNum(d.limit)}`);
-  else {
-    if (d.used !== undefined) parts.push(`used ${fmtNum(d.used)}`);
-    if (d.limit !== undefined) parts.push(`limit ${fmtNum(d.limit)}`);
+/** Hard-truncate a possibly-ANSI string to `width` cells, appending an ellipsis. */
+function fitToWidth(s: string, width: number): string {
+  if (visLen(s) <= width) return s;
+  let out = "";
+  let len = 0;
+  let i = 0;
+  let colored = false;
+  const budget = Math.max(1, width - 1); // reserve one cell for "…"
+  while (i < s.length && len < budget) {
+    if (s[i] === "\u001b" && s[i + 1] === "[") {
+      const m = /^\[[0-9;]*m/.exec(s.slice(i));
+      if (m) {
+        out += m[0];
+        i += m[0].length;
+        if (m[0] !== ANSI_RESET) colored = true;
+        continue;
+      }
+    }
+    out += s[i];
+    len += 1;
+    i += 1;
   }
-  if (d.remaining !== undefined) parts.push(`${fmtNum(d.remaining)} left`);
-  return parts.length > 0 ? dim(parts.join("  ·  ")) : "";
+  return out + "…" + (colored ? ANSI_RESET : "");
+}
+
+function fmtNum(n?: number): string {
+  return n === undefined || !Number.isFinite(n) ? "—" : String(n);
 }
 
 function isoLabel(iso?: string): string {
@@ -143,43 +162,32 @@ export function formatStatusLine(snapshots: readonly UsageSnapshot[], ctx?: Form
   return sanitizeText(truncate(line, CONFIG.statusLine.maxLength));
 }
 
-/** Detailed single-provider view for `/usage <provider>`. */
-export function formatProviderDetail(s: UsageSnapshot, ctx?: FormatContext): string {
-  const name = nameOf(s, ctx);
+/**
+ * Detailed single-provider view for `/usage <provider>`, rendered as an ASCII
+ * table. The provider name and refresh time form a centered, two-line spanning
+ * header; every quota block and its sub-rows are separated by horizontal rules.
+ * When `width` is given, optional columns are dropped and title lines that no
+ * longer fit are omitted entirely. The layout is provider-agnostic: any future
+ * provider renders the same table with its own name in the header. */
+export function formatProviderDetail(
+  s: UsageSnapshot,
+  ctx?: FormatContext,
+  width?: number,
+): string {
   const lines: string[] = [];
-  lines.push(`${name}${s.stale ? "  " + yellow("⚠ data may be stale") : ""}`);
-  lines.push(dim(`refreshed ${localIso(s.timestamp)}`));
-  if (s.error) {
-    const http = s.error.httpStatus ? ` (HTTP ${s.error.httpStatus})` : "";
-    lines.push(red(`error: ${s.error.code} — ${s.error.message}${http}`));
-  }
-  lines.push("");
 
   if (s.quotas.length > 0) {
-    for (const q of s.quotas) {
-      const color = pctColor(q.percentage);
-      lines.push(
-        `  ${pad(q.label, 18)}${bar(q.percentage)} ${color(formatPct(q.percentage))}`,
-      );
-      const parts: string[] = [];
-      if (q.used !== undefined && q.limit !== undefined) parts.push(`used ${fmtNum(q.used)} / ${fmtNum(q.limit)}`);
-      else {
-        if (q.used !== undefined) parts.push(`used ${fmtNum(q.used)}`);
-        if (q.limit !== undefined) parts.push(`limit ${fmtNum(q.limit)}`);
-      }
-      if (q.remaining !== undefined) parts.push(`${fmtNum(q.remaining)} left`);
-      const rel = relativeIso(q.resetAt);
-      if (q.resetAt) parts.push(`resets ${shortIso(q.resetAt)}${rel ? ` (${rel})` : ""}`);
-      if (parts.length > 0) lines.push(`  ${" ".repeat(18 + 12 + 1)}${dim(parts.join("  ·  "))}`);
-      if (q.details && q.details.length > 0) {
-        for (const d of q.details) {
-          const seg = `      ${pad(d.label, 18)}${bar(d.percentage, 8)} ${color(formatPct(d.percentage))}`;
-          const dp = detailParts(d);
-          lines.push(dp ? `${seg}  ${dp}` : seg);
-        }
-      }
-    }
+    lines.push(...renderUsageTable(s, ctx, width));
   } else {
+    const name = nameOf(s, ctx);
+    const stale = s.stale ? "  " + yellow("⚠ data may be stale") : "";
+    lines.push(`${name}${stale}`);
+    lines.push(dim(`refreshed ${localIso(s.timestamp)}`));
+    if (s.error) {
+      const http = s.error.httpStatus ? ` (HTTP ${s.error.httpStatus})` : "";
+      lines.push(red(`error: ${s.error.code} — ${s.error.message}${http}`));
+    }
+    lines.push("");
     lines.push(dim("Quotas: (none reported)"));
   }
 
@@ -191,7 +199,145 @@ export function formatProviderDetail(s: UsageSnapshot, ctx?: FormatContext): str
       lines.push(`  ${pad(m.model, 24)}${fmtNum(m.used)}${pct}`);
     }
   }
-  return sanitizeText(lines.join("\n"));
+  return sanitizeText(
+    width === undefined ? lines.join("\n") : lines.map((l) => fitToWidth(l, width)).join("\n"),
+  );
+}
+
+// --- ASCII table renderer -------------------------------------------------
+
+interface TableRow {
+  /** Cell per column; missing cells render as empty. */
+  readonly cells: readonly string[];
+}
+
+interface ColumnSpec {
+  readonly title: string;
+  /** Drop order under narrow widths; lower is dropped sooner. Required if omitted. */
+  readonly optional?: number;
+}
+
+/** Pad to a visible width, ignoring ANSI escapes. */
+function visPad(s: string, n: number): string {
+  const len = visLen(s);
+  return len >= n ? s : s + " ".repeat(n - len);
+}
+
+/** Render a bordered ASCII table: `|` columns, `+`/`-` rules, a header row,
+ * and a horizontal rule after every row block. Dims the border lines. */
+function renderAsciiTable(
+  columns: readonly ColumnSpec[],
+  rows: readonly TableRow[],
+  width: number | undefined,
+  /** Spanning rows rendered above the column header, each centered. Lines
+   * that would not fit the table width are omitted (responsive). */
+  titleLines: readonly string[] = [],
+): string[] {
+  const natural = columns.map((c, i) =>
+    Math.max(visLen(c.title), ...rows.map((r) => visLen(r.cells[i] ?? ""))),
+  );
+  const total = (ws: readonly number[]): number => ws.filter((w) => w > 0).reduce((acc, w) => acc + w + 3, 1);
+
+  // Drop optional columns (lowest optional value first) until the table fits.
+  let active = columns.map((_, i) => i);
+  if (width !== undefined) {
+    while (total(active.map((i) => natural[i] ?? 0)) > width) {
+      const drop = columns
+        .map((c, i) => ({ c, i }))
+        .filter(({ c, i }) => active.includes(i) && c.optional !== undefined)
+        .sort((a, b) => (a.c.optional ?? 0) - (b.c.optional ?? 0))[0];
+      if (!drop) break;
+      active = active.filter((i) => i !== drop.i);
+    }
+  }
+  let widths: number[] = natural.map((w, i) => (active.includes(i) ? w : 0));
+
+  // Still too wide: shrink the first (label) column; cells hard-truncate.
+  if (width !== undefined && total(widths) > width) {
+    const others = widths.filter((w) => w > 0).reduce((acc, w) => acc + w + 3, 1) - (widths[0] ?? 0) - 3;
+    widths = widths.map((w, i) => (i === 0 ? Math.max(3, width - others - 3) : w));
+  }
+
+  const border = dim("+" + active.map((i) => "-".repeat((widths[i] ?? 0) + 2)).join("+") + "+");
+  const vbar = dim("|");
+  const renderRow = (cells: readonly string[]): string =>
+    active.map((i) => `${vbar} ${visPad(fitToWidth(cells[i] ?? "", widths[i] ?? 0), widths[i] ?? 0)} `).join("") + vbar;
+
+  // Centered spanning title rows across the full table width.
+  const tableWidth = total(widths);
+  const inner = tableWidth - 2;
+  const renderSpan = (text: string): string => {
+    const len = visLen(text);
+    const left = Math.floor((inner - len) / 2);
+    return `${vbar}${" ".repeat(Math.max(0, left))}${text}${" ".repeat(Math.max(0, inner - len - Math.max(0, left)))}${vbar}`;
+  };
+  const titles = titleLines.filter((t) => t.length > 0).filter((t) => width === undefined || visLen(t) <= inner);
+
+  const out: string[] = [border];
+  for (const t of titles) out.push(renderSpan(t));
+  if (titles.length > 0) out.push(border);
+  out.push(renderRow(columns.map((c) => c.title)), border);
+  for (const r of rows) out.push(renderRow(r.cells), border);
+  return out;
+}
+
+const USAGE_COLUMNS: readonly ColumnSpec[] = [
+  { title: "Quota" },
+  { title: "Usage", optional: 4 },
+  { title: "Pct" },
+  { title: "Used", optional: 3 },
+  { title: "Left", optional: 2 },
+  { title: "Resets", optional: 1 },
+];
+
+function quotaRowCells(label: string, q: UsageQuota): string[] {
+  let used = "—";
+  if (q.used !== undefined && q.limit !== undefined) used = `${fmtNum(q.used)} / ${fmtNum(q.limit)}`;
+  else if (q.used !== undefined) used = `used ${fmtNum(q.used)}`;
+  else if (q.limit !== undefined) used = `limit ${fmtNum(q.limit)}`;
+  const rel = relativeIso(q.resetAt);
+  return [
+    label,
+    q.percentage !== undefined ? bar(q.percentage) : "—",
+    pctColor(q.percentage)(formatPct(q.percentage).padStart(3)),
+    dim(used),
+    q.remaining !== undefined ? dim(fmtNum(q.remaining)) : "—",
+    q.resetAt ? dim(`${shortIso(q.resetAt)}${rel ? ` (${rel})` : ""}`) : "—",
+  ];
+}
+
+function detailRowCells(d: UsageQuotaDetail): string[] {
+  let used = "—";
+  if (d.used !== undefined && d.limit !== undefined) used = `${fmtNum(d.used)} / ${fmtNum(d.limit)}`;
+  else if (d.used !== undefined) used = `used ${fmtNum(d.used)}`;
+  else if (d.limit !== undefined) used = `limit ${fmtNum(d.limit)}`;
+  return [
+    dim(`  ${d.label}`),
+    d.percentage !== undefined ? bar(d.percentage) : "—",
+    pctColor(d.percentage)(formatPct(d.percentage).padStart(3)),
+    dim(used),
+    d.remaining !== undefined ? dim(fmtNum(d.remaining)) : "—",
+    "—",
+  ];
+}
+
+/** Build the quota table: the provider name and refresh time form a centered
+ * two-line spanning header; one row per quota and one indented row per
+ * sub-item, each separated from the next by a horizontal rule. */
+function renderUsageTable(s: UsageSnapshot, ctx: FormatContext | undefined, width: number | undefined): string[] {
+  const name = nameOf(s, ctx);
+  const stale = s.stale ? " ⚠ data may be stale" : "";
+  const titles = [`${name}${yellow(stale)}`, dim(`refreshed ${localIso(s.timestamp)}`)];
+  if (s.error) {
+    const http = s.error.httpStatus ? ` (HTTP ${s.error.httpStatus})` : "";
+    titles.push(red(`error: ${s.error.code} — ${s.error.message}${http}`));
+  }
+  const rows: TableRow[] = [];
+  for (const q of s.quotas) {
+    rows.push({ cells: quotaRowCells(q.label, q) });
+    for (const d of q.details ?? []) rows.push({ cells: detailRowCells(d) });
+  }
+  return renderAsciiTable(USAGE_COLUMNS, rows, width, titles);
 }
 
 /** Summary across providers for `/usage`. */

@@ -96,11 +96,16 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
     return { nameOf: (id) => registry?.get(id)?.name ?? id };
   }
 
-  function renderWidget(ctx: ExtensionContext, text: string): void {
+  /** Render the widget from a width-aware builder. The custom component
+   * re-runs `render(width)` on terminal resize, so the layout stays responsive. */
+  function renderWidget(ctx: ExtensionContext, build: (width?: number) => string): void {
     if (ctx.hasUI) {
-      ctx.ui.setWidget(WIDGET_KEY, text.split("\n"));
+      ctx.ui.setWidget(WIDGET_KEY, () => ({
+        render: (width: number) => build(width).split("\n"),
+        invalidate: () => {},
+      }));
     } else {
-      ctx.ui.notify(text.split("\n")[0] ?? "", "info");
+      ctx.ui.notify(build().split("\n")[0] ?? "", "info");
     }
   }
 
@@ -151,27 +156,29 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
       try {
         switch (action.kind) {
           case "summary": {
-            renderWidget(ctx, formatSummary(await collectCached(), fmtCtx()));
+            const snaps = await collectCached();
+            renderWidget(ctx, () => formatSummary(snaps, fmtCtx()));
             return;
           }
           case "detail": {
             if (!service) return;
-            renderWidget(ctx, formatProviderDetail(await service.getUsage(action.providerId), fmtCtx()));
+            const s = await service.getUsage(action.providerId);
+            renderWidget(ctx, (width) => formatProviderDetail(s, fmtCtx(), width));
             return;
           }
           case "refresh": {
             if (!service || !statusLine) return;
             const snaps = await service.refreshAll({ forceRefresh: true });
             void statusLine.update(service, { forceRefresh: true }).catch(() => undefined);
-            renderWidget(ctx, formatSummary(snaps, fmtCtx()));
+            renderWidget(ctx, () => formatSummary(snaps, fmtCtx()));
             return;
           }
           case "status": {
             if (!service) return;
-            renderWidget(
-              ctx,
-              formatStatus(await collectCached(), service.getCacheInfo(), service.getLastRefreshAt(), fmtCtx()),
-            );
+            const snaps = await collectCached();
+            const info = service.getCacheInfo();
+            const last = service.getLastRefreshAt();
+            renderWidget(ctx, () => formatStatus(snaps, info, last, fmtCtx()));
             return;
           }
           case "unknown": {

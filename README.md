@@ -11,7 +11,7 @@ It is built around a generic provider abstraction so new providers can be added 
 ## Features
 
 - **`/usage`** — summary of every configured & available provider.
-- **`/usage <provider>`** — detailed view for one provider (e.g. `/usage zai`), including per-quota and per-model numbers and reset times when the API exposes them.
+- **`/usage <provider>`** — detailed view for one provider (e.g. `/usage zai`), rendered as a responsive ASCII table with per-quota and per-model numbers and reset times when the API exposes them.
 - **`/usage refresh`** — bypass the cache and refresh all available providers immediately.
 - **`/usage status`** — show the current status line, last successful refresh, cache state, and per-provider availability.
 - **Non-blocking status line** — async refresh at startup and on a background timer, with safe degradation when data is unavailable.
@@ -79,11 +79,38 @@ Pi loads the TypeScript entry directly (via `jiti`), so no build step is require
 | Command | Behavior |
 | --- | --- |
 | `/usage` | Usage summary for all available providers; actionable guidance when none are available. |
-| `/usage zai` | Detailed Z.ai / GLM Coding Plan usage (5-hour quota, MCP monthly quota with per-tool breakdown, per-model usage, reset times). |
+| `/usage zai` | Detailed Z.ai / GLM Coding Plan usage as a responsive ASCII table (5-hour quota, MCP monthly quota with per-tool breakdown, per-model usage, reset times). |
 | `/usage refresh` | Force-refresh all available providers, ignoring the cache. Keeps the last good snapshot if a refresh fails. |
 | `/usage status` | Show status line content, last refresh time, cache state, and provider availability. |
 
 Output is formatted for the terminal and never contains keys, tokens, cookies, or `Authorization` headers.
+
+### Detail view
+
+`/usage <provider>` renders a bordered ASCII table. The provider name and refresh time form a centered spanning header; each quota and its sub-items occupy rows separated by horizontal rules. Example:
+
+```
++-------------------+--------------+-----+--------------+-------+---------------------------+
+|                                            GLM                                            |
+|                             refreshed 2026-08-15 09:43 local                              |
++-------------------+--------------+-----+--------------+-------+---------------------------+
+| Quota             | Usage        | Pct | Used         | Left  | Resets                    |
++-------------------+--------------+-----+--------------+-------+---------------------------+
+| MCP monthly quota | [##--------] | 18% | 180 / 1000   | 820   | 08-27 01:43 UTC (in 288h) |
++-------------------+--------------+-----+--------------+-------+---------------------------+
+|   web-search      | [##--------] | 22% | 220 / 1000   | 780   | —                         |
++-------------------+--------------+-----+--------------+-------+---------------------------+
+|   codebase-search | [#---------] | 10% | 100 / 1000   | 900   | —                         |
++-------------------+--------------+-----+--------------+-------+---------------------------+
+| 5-hour quota      | [###-------] | 32% | 5000 / 28000 | 23000 | 08-15 03:43 UTC (in 2h)   |
++-------------------+--------------+-----+--------------+-------+---------------------------+
+
+Models:
+  glm-4.6                 12000  (43%)
+  glm-4.5-air             3000  (11%)
+```
+
+The table is width-aware and re-renders on terminal resize: narrower terminals drop optional columns (`Resets` → `Left` → `Used` → `Usage` bar), then truncate long labels — never overflowing. The header layout is provider-agnostic, so future providers render the same table with their own name.
 
 ## Status line
 
@@ -140,7 +167,7 @@ src/
     usage-service.ts    # refresh, cache, dedup, stale fallback
     status-line.ts      # status line rendering & update strategy
   formatters/
-    usage.ts            # command + status text formatting
+    usage.ts            # command + status text formatting, responsive ASCII table renderer
   utils/
     http.ts             # controlled fetch: timeout, HTTPS, allowlist, redirect-reject
     time.ts             # time windows, ISO display, percentage/remaining math
