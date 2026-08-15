@@ -6,7 +6,7 @@ Currently supports **Z.ai / GLM Coding Plan**; architected to add more providers
 
 ```
 /usage
-GLM (zai) — 5h 32% · MCP 18%
+GLM (zai) — 5h 32% in 2h 13m · MCP 18% in 288h
 
 /usage zai
 +-------------------+--------------+-----+--------------+-------+---------------------------+
@@ -48,7 +48,7 @@ Update with `pi update --extensions`; remove with `pi remove npm:@imdlan/pi-usag
 
 | Command | Behavior |
 | --- | --- |
-| `/usage` | Usage summary for all available providers. |
+| `/usage` | Usage summary for all available providers, with each quota's relative reset time (`in 2h 13m`) when known. |
 | `/usage zai` | Detailed Z.ai / GLM usage as a responsive ASCII table: 5-hour quota, MCP monthly quota with per-tool breakdown, per-model usage, reset times. |
 | `/usage refresh` | Force-refresh, ignoring the cache. Keeps the last good snapshot on failure. |
 | `/usage status` | Status line content, last refresh, cache state, provider availability. |

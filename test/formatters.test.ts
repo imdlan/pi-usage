@@ -174,6 +174,25 @@ describe("formatSummary", () => {
     assert.match(out, /GLM \(zai\) — 5h 32% · MCP 18%/);
   });
 
+  it("shows relative reset time per quota when known", () => {
+    const future = new Date(Date.now() + 2 * 3600_000 + 13 * 60_000).toISOString();
+    const month = new Date(Date.now() + 16 * 86400_000).toISOString();
+    const s = snap({
+      quotas: [
+        { id: "five_hour", label: "5-hour quota", percentage: 32, resetAt: future },
+        { id: "monthly", label: "MCP monthly quota", percentage: 18, resetAt: month },
+      ],
+    });
+    const out = stripAnsi(formatSummary([s], ctx));
+    assert.match(out, /5h 32% in 2h 13m/);
+    assert.match(out, /MCP 18% in 384h/);
+  });
+
+  it("omits reset time when unknown", () => {
+    const out = stripAnsi(formatSummary([snap()], ctx));
+    assert.doesNotMatch(out, /in \d/);
+  });
+
   it("gives guidance when empty", () => {
     const out = formatSummary([]);
     assert.match(out, /No usage providers available/);

@@ -353,7 +353,11 @@ export function formatSummary(snapshots: readonly UsageSnapshot[], ctx?: FormatC
     if (s.quotas.length > 0) {
       const qs = s.quotas
         .slice(0, 2)
-        .map((q) => `${shortLabel(q)} ${formatPct(q.percentage)}`)
+        .map((q) => {
+          const seg = `${shortLabel(q)} ${formatPct(q.percentage)}`;
+          const rel = relativeIso(q.resetAt);
+          return rel ? `${seg} ${dim(rel)}` : seg;
+        })
         .join(" · ");
       return `${head} — ${qs}${s.stale ? "  ·  ⚠ stale" : ""}`;
     }
