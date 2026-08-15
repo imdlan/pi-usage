@@ -17,10 +17,15 @@ import { clampPercentage, pad2, truncate } from "../utils/time.js";
 export interface FormatContext {
   /** Resolve a provider id to a display name (e.g. "zai" -> "GLM"). */
   readonly nameOf?: (providerId: string) => string;
+  /** Resolve the currently active model id for a provider, if any.
+   * Rendered as `Name/model` so users can see which model is in use. */
+  readonly currentModelOf?: (providerId: string) => string | undefined;
 }
 
 function nameOf(s: UsageSnapshot, ctx?: FormatContext): string {
-  return ctx?.nameOf?.(s.provider) ?? s.provider;
+  const base = ctx?.nameOf?.(s.provider) ?? s.provider;
+  const model = ctx?.currentModelOf?.(s.provider);
+  return model ? `${base}/${model}` : base;
 }
 
 function shortLabel(q: UsageQuota): string {
@@ -175,10 +180,12 @@ export function formatProviderDetail(
 
   if (s.models && s.models.length > 0) {
     lines.push("");
-    lines.push("Models:");
+    const current = ctx?.currentModelOf?.(s.provider);
+    lines.push(current ? "Models (* = current):" : "Models:");
     for (const m of s.models) {
+      const mark = current !== undefined && m.model === current ? "*" : " ";
       const pct = m.percentage !== undefined ? `  (${formatPct(m.percentage)})` : "";
-      lines.push(`  ${pad(m.model, 24)}${fmtNum(m.used)}${pct}`);
+      lines.push(`  ${mark} ${pad(m.model, 24)}${fmtNum(m.used)}${pct}`);
     }
   }
   return sanitizeText(
@@ -371,6 +378,12 @@ export function formatStatus(
     `last refresh ${lastRefreshAt !== undefined ? fmtEpoch(lastRefreshAt) : "never"}`,
     `status line  ${snapshots.length > 0 ? formatStatusLine(snapshots, ctx) : "(empty)"}`,
   ];
+  const models = snapshots
+    .map((s) => (ctx?.currentModelOf?.(s.provider) ? `${nameOf(s, ctx)}` : undefined))
+    .filter((v): v is string => v !== undefined);
+  if (models.length > 0) {
+    titles.push(`current model ${models.join(" | ")}`);
+  }
   if (rows.length === 0) {
     return sanitizeText(titles.join("\n") + "\n\nNo providers registered.");
   }

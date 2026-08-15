@@ -6,11 +6,11 @@ Currently supports **Z.ai / GLM Coding Plan**; architected to add more providers
 
 ```
 /usage
-GLM (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% 2026-08-27 09:43:00
+GLM/glm-4.7 (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% 2026-08-27 09:43:00
 
 /usage zai
 +-------------------+--------------+-----+--------------+-------+---------------------+
-|                                            GLM                                             |
+|                                         GLM/glm-4.7                                         |
 |                              refreshed 2026-08-15 09:43:00                                |
 +-------------------+--------------+-----+--------------+-------+---------------------+
 | Quota             | Usage        | Pct | Used         | Left  | Resets              |
@@ -20,12 +20,16 @@ GLM (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% 2026-08-27 09:43:00
 | 5-hour quota      | [###-------] | 32% | 5000 / 28000 | 23000 | 2026-08-15 11:43:00 |
 +-------------------+--------------+-----+--------------+-------+---------------------+
 
+Models (* = current):
+  * glm-4.7                  5000  (32%)
+    glm-4.6                   800  (5%)
+
 status line
-GLM · 5h 32% · MCP 18%
+GLM/glm-4.7 · 5h 32% · MCP 18%
 
 /usage pin
 ┌─ pinned above the editor ────────────────────────────────┐
-│ GLM (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% …    │
+│ GLM/glm-4.7 (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% …    │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -64,6 +68,10 @@ Update with `pi update --extensions`; remove with `pi remove npm:@imdlan/pi-usag
 By default the summary only appears when you run `/usage`. Run `/usage pin` (or `pin on`) to keep it **pinned above the editor** — the same multi-line summary as `/usage`, kept in sync by the background refresh (no extra API calls; it re-renders from cache). `/usage pin off` (or `pin` again) removes it. Pin state is per-session and resets on Pi restart. Note the pinned widget occupies ~1 line per provider at the top of the chat area.
 
 The detail table is width-aware: narrow terminals drop optional columns (`Resets` → `Left` → `Used` → `Usage` bar), then truncate labels — never overflowing. The status line refreshes in the background every 2 minutes (cache TTL: 2 minutes) and degrades to `GLM · usage unavailable` when data is unavailable. It never blocks the UI or model requests.
+
+### Current model indicator
+
+Wherever the provider name appears, the **currently active model id** is appended as `Name/model` (e.g. `GLM/glm-4.7`) — in the footer status line, the `/usage` summary, the pinned widget, and the detail table header. In the detail view's `Models` list, the current model is marked with `*`. The indicator follows model switches made via `/model`, cycling (`Ctrl+P`), or session restore, and only shows for providers that actually own the active model.
 
 ## Security & privacy
 

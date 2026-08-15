@@ -12,9 +12,14 @@ import {
   stripAnsi,
 } from "../src/formatters/usage.js";
 import type { CacheInfo } from "../src/services/usage-service.js";
+import { CONFIG } from "../src/config.js";
 import type { UsageSnapshot } from "../src/providers/types.js";
 
 const ctx = { nameOf: (id: string) => (id === "zai" ? "GLM" : id) };
+const ctxWithModel = {
+  ...ctx,
+  currentModelOf: (id: string) => (id === "zai" ? "glm-4.7" : undefined),
+};
 
 function snap(over: Partial<UsageSnapshot> = {}): UsageSnapshot {
   return {
@@ -44,6 +49,13 @@ describe("status line", () => {
     assert.equal(providerStatusSegment(snap(), ctx), "GLM · 5h 32% · MCP 18%");
   });
 
+  it("appends the current model id when known", () => {
+    assert.equal(
+      providerStatusSegment(snap(), ctxWithModel),
+      "GLM/glm-4.7 · 5h 32% · MCP 18%",
+    );
+  });
+
   it("degrades to unavailable when no quotas", () => {
     const s = snap({ quotas: [], error: { code: "auth_failed", message: "x" } });
     assert.equal(providerStatusSegment(s, ctx), "GLM · usage unavailable");
@@ -57,9 +69,9 @@ describe("status line", () => {
   });
 
   it("truncates to the configured max length", () => {
-    const many = Array.from({ length: 6 }, (_, i) => snap({ provider: `p${i}` }));
+    const many = Array.from({ length: 8 }, (_, i) => snap({ provider: `p${i}` }));
     const line = formatStatusLine(many);
-    assert.ok(line.length <= 80, `len=${line.length}`);
+    assert.ok(line.length <= CONFIG.statusLine.maxLength, `len=${line.length}`);
     assert.ok(line.endsWith("…"));
   });
 
@@ -137,6 +149,21 @@ describe("formatProviderDetail", () => {
     assert.match(out, /m1\s+—/);
   });
 
+  it("marks the current model in the Models list", () => {
+    const s = snap({
+      quotas: [],
+      models: [
+        { model: "glm-4.6", used: 1000, percentage: 5 },
+        { model: "glm-4.7", used: 2000, percentage: 10 },
+      ],
+    });
+    const out = stripAnsi(formatProviderDetail(s, ctxWithModel));
+    assert.match(out, /Models \(\* = current\):/);
+    assert.match(out, /\* glm-4\.7/);
+    assert.match(out, /\s glm-4\.6/);
+    assert.doesNotMatch(out, /\* glm-4\.6/);
+  });
+
   it("adapts to narrow terminals by dropping columns, never overflowing", () => {
     const s = snap();
     const wide = stripAnsi(formatProviderDetail(s, ctx, 120));
@@ -175,6 +202,11 @@ describe("formatSummary", () => {
     assert.match(out, /GLM \(zai\) — 5h 32% · MCP 18%/);
   });
 
+  it("includes the current model id when known", () => {
+    const out = formatSummary([snap()], ctxWithModel);
+    assert.match(out, /GLM\/glm-4\.7 \(zai\) — 5h 32% · MCP 18%/);
+  });
+
   it("shows reset datetime per quota when known", () => {
     const future = new Date(Date.now() + 2 * 3600_000 + 13 * 60_000).toISOString();
     const month = new Date(Date.now() + 16 * 86400_000).toISOString();
@@ -210,6 +242,15 @@ describe("formatStatus", () => {
     assert.match(plain, /last refresh/);
     assert.match(plain, /status line/);
     assert.match(plain, /GLM \(zai\)\s*\|\s*ok/);
+  });
+
+  it("shows the current model in the header", () => {
+    const info: CacheInfo[] = [
+      { id: "zai", name: "GLM", fetchedAt: 1747000000000, stale: false, hasError: false, cached: true },
+    ];
+    const out = formatStatus([snap()], info, undefined, ctxWithModel);
+    const plain = stripAnsi(out);
+    assert.match(plain, /current model GLM\/glm-4\.7/);
   });
 
   it("renders status as a bordered ASCII table", () => {

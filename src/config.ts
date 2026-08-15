@@ -22,7 +22,8 @@ export const CONFIG = {
     timeoutMs: 10 * 1000,
   },
   statusLine: {
-    /** Maximum characters before the status line is truncated. */
-    maxLength: 80,
+    /** Maximum characters before the status line is truncated. Accounts for
+     * `Name/model` prefixes plus quota segments across a few providers. */
+    maxLength: 100,
   },
 } as const;

@@ -95,9 +95,15 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
   let uiCtx: ExtensionContext | undefined;
   /** Whether the summary widget is pinned above the editor and kept fresh. */
   let pinned = false;
+  /** Currently active model, tracked via model_select (set/cycle/restore). */
+  let currentModel: { provider: string; id: string } | undefined;
 
   function fmtCtx(): FormatContext {
-    return { nameOf: (id) => registry?.get(id)?.name ?? id };
+    return {
+      nameOf: (id) => registry?.get(id)?.name ?? id,
+      currentModelOf: (id) =>
+        currentModel && currentModel.provider === id ? currentModel.id : undefined,
+    };
   }
 
   /** Render the widget from a width-aware builder. The custom component
@@ -173,9 +179,27 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
     pinned = false;
     clearWidget();
     uiCtx = undefined;
+    currentModel = undefined;
     registry = undefined;
     service = undefined;
     statusLine = undefined;
+  });
+
+  // Track the active model so the footer, summary, and detail views can show
+  // `Name/model`. Re-render from cache on change so the footer follows switches
+  // made via /model, cycling (Ctrl+P), or session restore.
+  pi.on("model_select", (event) => {
+    currentModel = { provider: event.model.provider, id: event.model.id };
+    if (!service || !statusLine) return;
+    void (async () => {
+      await statusLine.update(service).catch(() => undefined);
+      if (pinned) {
+        const snaps = await collectCached().catch(() => []);
+        if (pinned && snaps.length > 0) {
+          renderWidget(() => formatSummary(snaps, fmtCtx()));
+        }
+      }
+    })();
   });
 
   pi.registerCommand("usage", {
