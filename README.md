@@ -105,9 +105,9 @@ The status line never blocks model requests, commands, or the UI.
 
 Defaults are centralized and tuned for safety. Notable defaults:
 
-- Cache TTL: **5 minutes**
+- Cache TTL: **2 minutes**
 - Request timeout: **10 seconds**
-- Background refresh interval: **5 minutes**
+- Background refresh interval: **2 minutes**
 - Network allowlist: per provider (Z.ai: `api.z.ai`, `open.bigmodel.cn`, `dev.bigmodel.cn`)
 
 The extension does **not** accept plaintext keys, arbitrary URLs, or any configuration that could weaken its security boundaries.

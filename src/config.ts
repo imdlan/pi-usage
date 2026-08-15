@@ -8,12 +8,12 @@
  */
 export const CONFIG = {
   cache: {
-    /** Cache time-to-live in milliseconds (default ~5 minutes). */
-    ttlMs: 5 * 60 * 1000,
+    /** Cache time-to-live in milliseconds (default ~2 minutes). */
+    ttlMs: 2 * 60 * 1000,
   },
   refresh: {
     /** Background refresh interval in milliseconds. */
-    intervalMs: 5 * 60 * 1000,
+    intervalMs: 2 * 60 * 1000,
     /** Non-blocking delay before the first startup refresh, in milliseconds. */
     startupDelayMs: 1500,
   },
