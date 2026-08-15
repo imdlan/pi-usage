@@ -25,7 +25,7 @@ function nameOf(s: UsageSnapshot, ctx?: FormatContext): string {
 
 function shortLabel(q: UsageQuota): string {
   if (q.id === "five_hour") return "5h";
-  if (q.id === "monthly") return "mcp";
+  if (q.id === "monthly") return "MCP";
   return q.label;
 }
 

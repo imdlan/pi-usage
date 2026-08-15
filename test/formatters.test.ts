@@ -41,7 +41,7 @@ function snap(over: Partial<UsageSnapshot> = {}): UsageSnapshot {
 
 describe("status line", () => {
   it("formats quotas compactly", () => {
-    assert.equal(providerStatusSegment(snap(), ctx), "GLM · 5h 32% · mcp 18%");
+    assert.equal(providerStatusSegment(snap(), ctx), "GLM · 5h 32% · MCP 18%");
   });
 
   it("degrades to unavailable when no quotas", () => {
@@ -53,7 +53,7 @@ describe("status line", () => {
     const line = formatStatusLine([snap(), snap({ provider: "openai" })], {
       nameOf: (id) => (id === "zai" ? "GLM" : id === "openai" ? "OpenAI" : id),
     });
-    assert.match(line, /GLM · 5h 32% · mcp 18% \| OpenAI/);
+    assert.match(line, /GLM · 5h 32% · MCP 18% \| OpenAI/);
   });
 
   it("truncates to the configured max length", () => {
@@ -171,7 +171,7 @@ describe("formatProviderDetail", () => {
 describe("formatSummary", () => {
   it("lists each provider", () => {
     const out = formatSummary([snap()], ctx);
-    assert.match(out, /GLM \(zai\) — 5h 32% · mcp 18%/);
+    assert.match(out, /GLM \(zai\) — 5h 32% · MCP 18%/);
   });
 
   it("gives guidance when empty", () => {
