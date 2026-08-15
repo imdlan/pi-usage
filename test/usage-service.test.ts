@@ -31,13 +31,18 @@ interface Mock {
 }
 
 /** Provider that returns from a queue (last result repeats); tracks getUsage calls. */
-function mockProvider(id: string, results: UsageSnapshot[], opts: { delayMs?: number } = {}): Mock {
+function mockProvider(
+  id: string,
+  results: UsageSnapshot[],
+  opts: { delayMs?: number; available?: boolean } = {},
+): Mock {
   let calls = 0;
   let i = 0;
+  const available = opts.available ?? true;
   const provider: UsageProvider = {
     id,
     name: id.toUpperCase(),
-    isAvailable: async () => true,
+    isAvailable: async () => available,
     getUsage: async () => {
       calls++;
       const idx = Math.min(i, results.length - 1);
@@ -45,7 +50,7 @@ function mockProvider(id: string, results: UsageSnapshot[], opts: { delayMs?: nu
       if (!r) throw new Error("mock misconfigured");
       i++;
       if (opts.delayMs) await new Promise((res) => setTimeout(res, opts.delayMs));
-      return r;
+      return { ...r, provider: id };
     },
   };
   return { provider, calls: () => calls };
@@ -132,6 +137,57 @@ describe("UsageService - concurrency dedup", () => {
     const [a, b] = await Promise.all([svc.getUsage("mock"), svc.getUsage("mock")]);
     assert.equal(mock.calls(), 1);
     assert.deepEqual(a, b);
+  });
+});
+
+describe("UsageService - availability filtering", () => {
+  function makeTwoProviderService(availableB: boolean) {
+    const a = mockProvider("mock-a", [okSnap(30)]);
+    const b = mockProvider("mock-b", [errSnap()], { available: availableB });
+    const registry = new ProviderRegistry();
+    registry.register(a.provider);
+    registry.register(b.provider);
+    return { svc: new UsageService({ registry, ttlMs: 1000, now: () => new Date(5000) }), a, b };
+  }
+
+  it("availableProviders excludes providers without auth", async () => {
+    const { svc, a, b } = makeTwoProviderService(false);
+    const available = await svc.availableProviders();
+    assert.deepEqual(available.map((p) => p.id), [a.provider.id]);
+    assert.equal(available.includes(b.provider), false);
+  });
+
+  it("refreshAll skips unavailable providers entirely", async () => {
+    const { svc, b } = makeTwoProviderService(false);
+    const snaps = await svc.refreshAll();
+    assert.deepEqual(snaps.map((s) => s.provider), ["mock-a"]);
+    assert.equal(b.calls(), 0);
+  });
+
+  it("getCacheInfo restricted to given ids mirrors the rendered set", async () => {
+    const { svc } = makeTwoProviderService(false);
+    await svc.refreshAll();
+    const snaps = await svc.refreshAll({ forceRefresh: true });
+    const info = svc.getCacheInfo(snaps.map((s) => s.provider));
+    assert.deepEqual(info.map((c) => c.id), ["mock-a"]);
+  });
+
+  it("a provider that throws on isAvailable is skipped", async () => {
+    const a = mockProvider("mock-a", [okSnap(30)]);
+    const broken: UsageProvider = {
+      id: "broken",
+      name: "BROKEN",
+      isAvailable: async () => {
+        throw new Error("boom");
+      },
+      getUsage: async () => { throw new Error("must not be called"); },
+    };
+    const registry = new ProviderRegistry();
+    registry.register(a.provider);
+    registry.register(broken);
+    const svc = new UsageService({ registry, ttlMs: 1000, now: () => new Date(5000) });
+    const snaps = await svc.refreshAll();
+    assert.deepEqual(snaps.map((s) => s.provider), ["mock-a"]);
   });
 });
 

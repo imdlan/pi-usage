@@ -183,9 +183,12 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
   }
 
   async function collectCached(): Promise<UsageSnapshot[]> {
-    if (!service || !registry) return [];
+    if (!service) return [];
+    // Only providers with authorized auth — unconfigured ones must never
+    // surface as "unavailable" noise in summary/status/pinned views.
+    const available = await service.availableProviders();
     const snaps: UsageSnapshot[] = [];
-    for (const p of registry.all()) {
+    for (const p of available) {
       snaps.push(await service.getUsage(p.id));
     }
     return snaps;
@@ -304,7 +307,7 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
           case "status": {
             if (!service) return;
             const snaps = await collectCached();
-            const info = service.getCacheInfo();
+            const info = service.getCacheInfo(snaps.map((s) => s.provider));
             const last = service.getLastRefreshAt();
             renderWidget((width) => formatStatus(snaps, info, last, fmtCtx(), width));
             return;

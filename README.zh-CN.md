@@ -4,7 +4,7 @@
 
 一个 [Pi Coding Agent](https://github.com/earendil-works/pi-coding-agent) 扩展，在 Pi 内部显示 **AI 供应商用量与配额**。
 
-支持 **Z.ai / GLM Coding Plan**、**DeepSeek** 和 **OpenRouter**。仅在 Pi 中配置了对应供应商时才会出现。
+支持 **Z.ai / GLM Coding Plan**、**DeepSeek** 和 **OpenRouter**。仅在 Pi 中配置了对应供应商时才会出现；已配置但查询失败的仍会显示（标记 `error`/`stale`），未配置的完全隐藏。
 
 > **关于 API 稳定性的诚实说明**：本扩展会主动调用各供应商的用量查询接口。设计原则：**只用官方公开文档接口**，且**多供应商架构**——在 Pi 里配置了哪些供应商就显示哪些。
 >

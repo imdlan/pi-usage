@@ -116,8 +116,10 @@ export class UsageService {
     return entry.inflight;
   }
 
-  /** Refresh every available provider. Used by startup and the background timer. */
-  async refreshAll(options?: UsageRefreshOptions): Promise<UsageSnapshot[]> {
+  /** Providers that currently have authorized auth. Checked live so a
+   * provider configured mid-session appears immediately. Used to filter what
+   * is rendered: unconfigured providers never surface as "unavailable" noise. */
+  async availableProviders(): Promise<UsageProvider[]> {
     const available: UsageProvider[] = [];
     for (const p of this.registry.all()) {
       try {
@@ -126,6 +128,12 @@ export class UsageService {
         // A provider that errors on availability is simply skipped.
       }
     }
+    return available;
+  }
+
+  /** Refresh every available provider. Used by startup and the background timer. */
+  async refreshAll(options?: UsageRefreshOptions): Promise<UsageSnapshot[]> {
+    const available = await this.availableProviders();
     const results = await Promise.all(available.map((p) => this.getUsage(p.id, options)));
     this.lastRefreshAt = this.now().getTime();
     return results;
@@ -135,8 +143,12 @@ export class UsageService {
     return this.lastRefreshAt;
   }
 
-  getCacheInfo(): CacheInfo[] {
-    return this.registry.all().map((p) => {
+  /** Cache state per provider. Pass `ids` to restrict the report to a subset
+   * (e.g. only available providers) — mirrors what the UI actually renders. */
+  getCacheInfo(ids?: readonly string[]): CacheInfo[] {
+    const all = this.registry.all();
+    const list = ids === undefined ? all : all.filter((p) => ids.includes(p.id));
+    return list.map((p) => {
       const entry = this.cache.get(p.id);
       return {
         id: p.id,
