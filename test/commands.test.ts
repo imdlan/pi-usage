@@ -22,6 +22,16 @@ describe("routeUsageCommand", () => {
     assert.deepEqual(routeUsageCommand("status", IDS), { kind: "status" });
   });
 
+  it("pin -> toggle; pin on/off -> explicit mode", () => {
+    assert.deepEqual(routeUsageCommand("pin", IDS), { kind: "pin", mode: "toggle" });
+    assert.deepEqual(routeUsageCommand("pin on", IDS), { kind: "pin", mode: "on" });
+    assert.deepEqual(routeUsageCommand("pin   off", IDS), { kind: "pin", mode: "off" });
+  });
+
+  it("pin with unknown sub-arg -> unknown", () => {
+    assert.deepEqual(routeUsageCommand("pin zai", IDS), { kind: "unknown", input: "pin zai" });
+  });
+
   it("known provider id -> detail", () => {
     assert.deepEqual(routeUsageCommand("zai", IDS), { kind: "detail", providerId: "zai" });
   });

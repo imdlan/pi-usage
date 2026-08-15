@@ -91,6 +91,10 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
   let statusLine: StatusLineService | undefined;
   let timer: ReturnType<typeof setInterval> | undefined;
   let startupTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Session UI context; valid between session_start and session_shutdown. */
+  let uiCtx: ExtensionContext | undefined;
+  /** Whether the summary widget is pinned above the editor and kept fresh. */
+  let pinned = false;
 
   function fmtCtx(): FormatContext {
     return { nameOf: (id) => registry?.get(id)?.name ?? id };
@@ -98,7 +102,9 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
 
   /** Render the widget from a width-aware builder. The custom component
    * re-runs `render(width)` on terminal resize, so the layout stays responsive. */
-  function renderWidget(ctx: ExtensionContext, build: (width?: number) => string): void {
+  function renderWidget(build: (width?: number) => string): void {
+    const ctx = uiCtx;
+    if (!ctx) return;
     if (ctx.hasUI) {
       ctx.ui.setWidget(WIDGET_KEY, () => ({
         render: (width: number) => build(width).split("\n"),
@@ -106,6 +112,17 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
       }));
     } else {
       ctx.ui.notify(build().split("\n")[0] ?? "", "info");
+    }
+  }
+
+  /** Remove the widget entirely (used when unpinning and on shutdown). */
+  function clearWidget(): void {
+    const ctx = uiCtx;
+    if (!ctx?.hasUI) return;
+    try {
+      ctx.ui.setWidget(WIDGET_KEY, undefined);
+    } catch {
+      // Best-effort; a failing clear must never break shutdown.
     }
   }
 
@@ -121,13 +138,23 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
   function startBackground(): void {
     const refresh = (): void => {
       if (!service || !statusLine) return;
-      void statusLine.update(service, { forceRefresh: true }).catch(() => undefined);
+      void (async () => {
+        await statusLine.update(service, { forceRefresh: true }).catch(() => undefined);
+        // Keep the pinned widget in sync from the freshly written cache.
+        if (pinned) {
+          const snaps = await collectCached().catch(() => []);
+          if (pinned && snaps.length > 0) {
+            renderWidget(() => formatSummary(snaps, fmtCtx()));
+          }
+        }
+      })();
     };
     startupTimer = setTimeout(refresh, CONFIG.refresh.startupDelayMs);
     timer = setInterval(refresh, CONFIG.refresh.intervalMs);
   }
 
-  pi.on("session_start", (_event, ctx) => {
+  pi.on("session_start", (event, ctx) => {
+    uiCtx = ctx;
     registry = new ProviderRegistry();
     registry.register(createZaiProvider({ resolveAuth: createZaiAuthResolver(ctx) }));
     service = new UsageService({ registry });
@@ -143,13 +170,16 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
     if (startupTimer) clearTimeout(startupTimer);
     timer = undefined;
     startupTimer = undefined;
+    pinned = false;
+    clearWidget();
+    uiCtx = undefined;
     registry = undefined;
     service = undefined;
     statusLine = undefined;
   });
 
   pi.registerCommand("usage", {
-    description: "View AI provider usage and quota: /usage [provider|refresh|status]",
+    description: "View AI provider usage and quota: /usage [provider|refresh|status|pin]",
     handler: async (args, ctx) => {
       const ids = registry ? [...registry.ids()] : [];
       const action = routeUsageCommand(args, ids);
@@ -157,20 +187,20 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
         switch (action.kind) {
           case "summary": {
             const snaps = await collectCached();
-            renderWidget(ctx, () => formatSummary(snaps, fmtCtx()));
+            renderWidget(() => formatSummary(snaps, fmtCtx()));
             return;
           }
           case "detail": {
             if (!service) return;
             const s = await service.getUsage(action.providerId);
-            renderWidget(ctx, (width) => formatProviderDetail(s, fmtCtx(), width));
+            renderWidget((width) => formatProviderDetail(s, fmtCtx(), width));
             return;
           }
           case "refresh": {
             if (!service || !statusLine) return;
             const snaps = await service.refreshAll({ forceRefresh: true });
             void statusLine.update(service, { forceRefresh: true }).catch(() => undefined);
-            renderWidget(ctx, () => formatSummary(snaps, fmtCtx()));
+            renderWidget(() => formatSummary(snaps, fmtCtx()));
             return;
           }
           case "status": {
@@ -178,7 +208,21 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
             const snaps = await collectCached();
             const info = service.getCacheInfo();
             const last = service.getLastRefreshAt();
-            renderWidget(ctx, (width) => formatStatus(snaps, info, last, fmtCtx(), width));
+            renderWidget((width) => formatStatus(snaps, info, last, fmtCtx(), width));
+            return;
+          }
+          case "pin": {
+            const enable =
+              action.mode === "on" || (action.mode === "toggle" && !pinned);
+            pinned = enable;
+            if (enable) {
+              const snaps = await collectCached();
+              renderWidget(() => formatSummary(snaps, fmtCtx()));
+              ctx.ui.notify("usage widget pinned (updates every refresh)", "info");
+            } else {
+              clearWidget();
+              ctx.ui.notify("usage widget unpinned", "info");
+            }
             return;
           }
           case "unknown": {

@@ -52,6 +52,7 @@ Update with `pi update --extensions`; remove with `pi remove npm:@imdlan/pi-usag
 | `/usage zai` | Detailed Z.ai / GLM usage as a responsive ASCII table: 5-hour quota, MCP monthly quota with per-tool breakdown, per-model usage, reset times. |
 | `/usage refresh` | Force-refresh, ignoring the cache. Keeps the last good snapshot on failure. |
 | `/usage status` | Status line content, last refresh, cache state, provider availability. |
+| `/usage pin` | Toggle the usage summary widget pinned above the editor; it stays in sync with the background refresh. `pin on` / `pin off` set the state explicitly. |
 
 The detail table is width-aware: narrow terminals drop optional columns (`Resets` → `Left` → `Used` → `Usage` bar), then truncate labels — never overflowing. The status line refreshes in the background every 2 minutes (cache TTL: 2 minutes) and degrades to `GLM · usage unavailable` when data is unavailable. It never blocks the UI or model requests.
 
