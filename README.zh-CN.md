@@ -2,6 +2,8 @@
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
+![pi-usage demo](https://i.imgur.com/6HLS8xm.gif)
+
 一个 [Pi Coding Agent](https://github.com/earendil-works/pi-coding-agent) 扩展，在 Pi 内部显示 **AI 供应商用量与配额**。
 
 支持 **Z.ai / GLM Coding Plan**、**DeepSeek** 和 **OpenRouter**。仅在 Pi 中配置了对应供应商时才会出现；已配置但查询失败的仍会显示（标记 `error`/`stale`），未配置的完全隐藏。
