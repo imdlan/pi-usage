@@ -36,4 +36,5 @@ Thumbs.db
 .pi/
 .aider*
 npm发布流程.md
+需求方案.md
 release-*.md
