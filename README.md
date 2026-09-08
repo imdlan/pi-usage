@@ -20,6 +20,7 @@ Supports **Z.ai / GLM Coding Plan**, **Kimi Coding Plan**, **DeepSeek**, and **O
 ```
 /usage
 GLM/glm-5.3 (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% 2026-08-27 09:43:00
+Kimi/kimi-for-coding (kimi) — 5h 27% 2026-08-08 14:53:05 · Weekly quota 26% 2026-08-11 15:53:05
 
 /usage zai
 +-------------------+--------------+-----+--------------+-------+---------------------+
@@ -38,11 +39,12 @@ Models (* = current):
     glm-5.2                   800  (5%)
 
 status line (always auto-refreshed every 2 min)
-GLM/glm-5.3 · 5h 32% · MCP 18%
+GLM/glm-5.3 · 5h 32% · MCP 18% | Kimi/kimi-for-coding · 5h 27% · Weekly quota 26%
 
 /usage pin (widget pinned above the editor, auto-refreshed)
 ┌─ pinned above the editor ──────────────────────────────────────────┐
 │ GLM/glm-5.3 (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% …    │
+│ Kimi/kimi-for-coding (kimi) — 5h 27% · Weekly quota 26% …     │
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -80,7 +82,7 @@ The detail table is width-aware: narrow terminals drop optional columns (`Resets
 
 ## Current model indicator
 
-Wherever the provider name appears, the active model id is appended as `Name/model` (e.g. `GLM/glm-5.3`) — footer, summary, pinned widget, and detail table header. It follows model switches via `/model`, cycling (`Ctrl+P`), or session restore.
+Wherever the provider name appears, the active model id is appended as `Name/model` (e.g. `GLM/glm-5.3`, `Kimi/kimi-for-coding`) — footer, summary, pinned widget, and detail table header. It follows model switches via `/model`, cycling (`Ctrl+P`), or session restore. The active model is matched by provider id first, then by base-URL host, so Pi entries like `zai-coding-cn` and `kimi-coding` map onto the `zai` and `kimi` usage providers.
 
 ## Security & privacy
 

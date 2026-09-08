@@ -20,6 +20,7 @@
 ```
 /usage
 GLM/glm-5.3 (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% 2026-08-27 09:43:00
+Kimi/kimi-for-coding (kimi) — 5h 27% 2026-08-08 14:53:05 · Weekly quota 26% 2026-08-11 15:53:05
 
 /usage zai
 +-------------------+--------------+-----+--------------+-------+---------------------+
@@ -38,11 +39,12 @@ Models (* = current):
     glm-5.2                   800  (5%)
 
 status line（始终每 2 分钟自动刷新）
-GLM/glm-5.3 · 5h 32% · MCP 18%
+GLM/glm-5.3 · 5h 32% · MCP 18% | Kimi/kimi-for-coding · 5h 27% · Weekly quota 26%
 
 /usage pin（固定在编辑器上方的 widget，自动刷新）
 ┌─ pinned above the editor ──────────────────────────────────────────┐
 │ GLM/glm-5.3 (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% …    │
+│ Kimi/kimi-for-coding (kimi) — 5h 27% · Weekly quota 26% …     │
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -80,7 +82,7 @@ pi install npm:@imdlan/pi-usage
 
 ## 当前模型指示
 
-凡显示供应商名称处，均追加当前活跃模型 id，格式 `Name/model`（如 `GLM/glm-5.3`）—— 状态栏、摘要、固定 widget、明细表头。跟随 `/model`、循环切换（`Ctrl+P`）或会话恢复的模型切换。
+凡显示供应商名称处，均追加当前活跃模型 id，格式 `Name/model`（如 `GLM/glm-5.3`、`Kimi/kimi-for-coding`）—— 状态栏、摘要、固定 widget、明细表头。跟随 `/model`、循环切换（`Ctrl+P`）或会话恢复的模型切换。活跃模型先按 provider id 匹配，再按 base URL host 匹配，因此 Pi 中如 `zai-coding-cn`、`kimi-coding` 的配置项可对应到 `zai`、`kimi` 用量供应商。
 
 ## 安全与隐私
 
