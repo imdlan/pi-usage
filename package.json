@@ -1,7 +1,7 @@
 {
   "name": "@imdlan/pi-usage",
   "version": "0.4.1",
-  "description": "Pi Coding Agent extension to view usage and quota for AI providers: Z.ai / GLM Coding Plan, DeepSeek, and OpenRouter. Not affiliated with any provider; trademarks belong to their owners.",
+  "description": "Pi Coding Agent extension to view usage and quota for AI providers: Z.ai / GLM Coding Plan, Kimi Coding Plan, DeepSeek, and OpenRouter. Not affiliated with any provider; trademarks belong to their owners.",
   "type": "module",
   "keywords": [
     "pi-package",
@@ -10,6 +10,8 @@
     "quota",
     "zai",
     "glm",
+    "kimi",
+    "moonshot",
     "deepseek",
     "openrouter"
   ],
