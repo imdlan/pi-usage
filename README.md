@@ -4,7 +4,7 @@
 
 ![pi-usage demo](https://i.imgur.com/6HLS8xm.gif)
 
-A [Pi Coding Agent](https://pi.dev/) extension that shows **AI provider usage and quota** inside Pi.
+An extension for [Pi](https://pi.dev/) — a minimal agent harness — that shows **AI provider usage and quota** inside Pi.
 
 Supports **Z.ai / GLM Coding Plan**, **Kimi Coding Plan**, **DeepSeek**, and **OpenRouter**. Each provider only appears when a matching one is configured in Pi. A configured provider whose query fails is still shown (marked `error`/`stale`); unconfigured ones are never rendered.
 

@@ -2,7 +2,7 @@
 // Copyright (c) 2026 imdlan
 
 /**
- * pi-usage — Pi Coding Agent extension entry point.
+ * pi-usage — Pi (minimal agent harness) extension entry point.
  *
  * Wires the Z.ai provider to Pi's authorized auth resolution, registers the
  * `/usage` command, keeps the footer status line updated, and runs a background

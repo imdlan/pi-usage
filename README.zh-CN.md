@@ -4,7 +4,7 @@
 
 ![pi-usage demo](https://i.imgur.com/6HLS8xm.gif)
 
-一个 [Pi Coding Agent](https://pi.dev/) 扩展，在 Pi 内部显示 **AI 供应商用量与配额**。
+为 [Pi](https://pi.dev/)（极简 agent harness）编写的扩展，在 Pi 内部显示 **AI 供应商用量与配额**。
 
 支持 **Z.ai / GLM Coding Plan**、**Kimi Coding Plan**、**DeepSeek** 和 **OpenRouter**。仅在 Pi 中配置了对应供应商时才会出现；已配置但查询失败的仍会显示（标记 `error`/`stale`），未配置的完全隐藏。
 
