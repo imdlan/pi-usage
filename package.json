@@ -1,6 +1,6 @@
 {
   "name": "@imdlan/pi-usage",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Extension for Pi (a minimal agent harness) to view usage and quota for AI providers: Z.ai / GLM Coding Plan, Kimi Coding Plan, DeepSeek, and OpenRouter. Not affiliated with any provider; trademarks belong to their owners.",
   "type": "module",
   "keywords": [
