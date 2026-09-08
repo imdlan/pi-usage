@@ -10,8 +10,10 @@
  *     (resolved via the injected `resolveAuth`, backed by Pi's authorized
  *     `getProviderAuth`). This file never reads auth files or env vars.
  *   - Usage endpoints are derived from the provider base URL origin.
- *   - `quota/limit` is the only response with a confirmed structure
- *     (`TOKENS_LIMIT` = 5-hour quota, `TIME_LIMIT` = monthly quota).
+ *   - `quota/limit` is the only response with a confirmed structure:
+ *     Coding-Plan windows arrive as `TOKENS_LIMIT` (legacy) or `CREDIT_LIMIT`
+ *     (newer credit-billed plans), mapped by `unit × number` window length;
+ *     `TIME_LIMIT` is the monthly MCP quota.
  *   - `model-usage` / `tool-usage` are parsed defensively and degrade gracefully.
  *
  * SECURITY: the token from `resolveAuth` is used only inside an Authorization
@@ -112,6 +114,78 @@ function unwrapData(payload: unknown): unknown {
   return payload;
 }
 
+/** Window-unit multipliers (minutes per unit), cross-confirmed via CodexBar's
+ * independent CREDIT_LIMIT parser: unit 1=day, 3=hour, 5=minute, 6=week. */
+const PLAN_WINDOW_UNIT_MINUTES: Record<number, number> = { 1: 1440, 3: 60, 5: 1, 6: 10080 };
+
+const PLAN_WINDOW_UNIT_NAMES: Record<number, string> = { 1: "day", 3: "hour", 5: "minute", 6: "week" };
+
+/**
+ * Map one Coding-Plan window entry (`TOKENS_LIMIT`, or `CREDIT_LIMIT` on newer
+ * credit-billed plans; same shape) to a quota row.
+ *
+ * Window length is `number × unit` minutes: 300 -> the 5-hour window, 10080 ->
+ * the weekly window; any other duration degrades to a generic labeled window
+ * row. Legacy entries carry no `number` and keep the historical convention
+ * (unit 3 -> five-hour, unit 6 -> weekly). Unparseable entries fall back to the
+ * raw type name — never an error, never a dropped row.
+ *
+ * The server-side `percentage` stays authoritative; optional `usage` /
+ * `currentValue` / `remaining` counts fill the Used/Left columns when present.
+ */
+function parsePlanWindow(
+  item: Record<string, unknown>,
+  type: string,
+  pct: number | undefined,
+  resetAt: string | undefined,
+): UsageQuota {
+  const unit = toNum(item.unit);
+  const number = toNum(item.number);
+  const multiplier = unit !== undefined ? PLAN_WINDOW_UNIT_MINUTES[unit] : undefined;
+  const minutes =
+    multiplier !== undefined && number !== undefined && number > 0
+      ? number * multiplier
+      : undefined;
+
+  let id: string;
+  let label: string;
+  if (minutes === 300) {
+    id = "five_hour";
+    label = "5-hour quota";
+  } else if (minutes === 10080) {
+    id = "weekly";
+    label = "Weekly quota";
+  } else if (minutes !== undefined && unit !== undefined) {
+    const name = PLAN_WINDOW_UNIT_NAMES[unit] ?? `unit${unit}`;
+    id = `window_${number}_${name}`;
+    label = `${number} ${name} window`;
+  } else if (unit === undefined || unit === 3) {
+    // Legacy shape without `number`: no unit or unit 3 was the five-hour
+    // quota in the historical convention (`unit === 6 ? weekly : five_hour`).
+    id = "five_hour";
+    label = "5-hour quota";
+  } else if (unit === 6) {
+    id = "weekly";
+    label = "Weekly quota";
+  } else {
+    id = slug(type);
+    label = type;
+  }
+
+  const limit = toNum(item.usage);
+  const used = toNum(item.currentValue);
+  const remaining = toNum(item.remaining);
+  return {
+    id,
+    label,
+    percentage: pct ?? computePercentage(used, limit),
+    used,
+    limit,
+    remaining: remaining ?? computeRemaining(limit, used),
+    resetAt,
+  };
+}
+
 /** Parse `quota/limit` into generic quotas. Confirmed structure only. */
 function parseQuotaLimit(payload: unknown): UsageQuota[] {
   const root = unwrapData(payload);
@@ -125,16 +199,8 @@ function parseQuotaLimit(payload: unknown): UsageQuota[] {
     const type = typeof item.type === "string" ? item.type : "";
     const pct = clampPercentage(toNum(item.percentage));
     const resetAt = toResetIso(item.nextResetTime, item.resetAt);
-    if (type === "TOKENS_LIMIT") {
-      // Upstream: TOKENS_LIMIT unit=3 is the 5-hour token quota; unit=6 is the
-      // weekly quota on newer plans. API exposes percentage and reset only —
-      // no token used/limit numbers — so Used/Left render as "—".
-      const weekly = toNum(item.unit) === 6;
-      out.push(
-        weekly
-          ? { id: "weekly", label: "Weekly quota", percentage: pct, resetAt }
-          : { id: "five_hour", label: "5-hour quota", percentage: pct, resetAt },
-      );
+    if (type === "TOKENS_LIMIT" || type === "CREDIT_LIMIT") {
+      out.push(parsePlanWindow(item, type, pct, resetAt));
     } else if (type === "TIME_LIMIT") {
       // Upstream glm-plan-usage labels this "MCP usage(1 Month)": a monthly cap on
       // MCP tool invocations (web search, web reader, repo lookup), not model tokens.

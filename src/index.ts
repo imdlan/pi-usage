@@ -20,6 +20,7 @@ import { routeUsageCommand } from "./commands.js";
 import { formatProviderDetail, formatStatus, formatSummary } from "./formatters/usage.js";
 import type { FormatContext } from "./formatters/usage.js";
 import { createDeepSeekProvider, DEEPSEEK_ALLOWED_HOSTS } from "./providers/deepseek.js";
+import { createKimiProvider, KIMI_ALLOWED_HOSTS } from "./providers/kimi.js";
 import { createOpenRouterProvider, OPENROUTER_ALLOWED_HOSTS } from "./providers/openrouter.js";
 import { ProviderRegistry } from "./providers/registry.js";
 import type { ProviderAuth, UsageSnapshot } from "./providers/types.js";
@@ -34,6 +35,7 @@ const WIDGET_KEY = "pi-usage";
 const PROVIDER_HOSTS: Readonly<Record<string, readonly string[]>> = {
   zai: ZAI_ALLOWED_HOSTS,
   deepseek: DEEPSEEK_ALLOWED_HOSTS,
+  kimi: KIMI_ALLOWED_HOSTS,
   openrouter: OPENROUTER_ALLOWED_HOSTS,
 };
 
@@ -229,6 +231,9 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
     registry.register(createZaiProvider({ resolveAuth: createHostAuthResolver(ctx, ZAI_ALLOWED_HOSTS) }));
     registry.register(
       createDeepSeekProvider({ resolveAuth: createHostAuthResolver(ctx, DEEPSEEK_ALLOWED_HOSTS) }),
+    );
+    registry.register(
+      createKimiProvider({ resolveAuth: createHostAuthResolver(ctx, KIMI_ALLOWED_HOSTS) }),
     );
     registry.register(
       createOpenRouterProvider({ resolveAuth: createHostAuthResolver(ctx, OPENROUTER_ALLOWED_HOSTS) }),

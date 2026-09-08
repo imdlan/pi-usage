@@ -202,6 +202,19 @@ describe("formatSummary", () => {
     assert.match(out, /GLM \(zai\) — 5h 32% · MCP 18%/);
   });
 
+  it("renders a weekly quota via the 7d short label", () => {
+    const s = snap({
+      quotas: [
+        { id: "five_hour", label: "5-hour limit", percentage: 1 },
+        { id: "weekly", label: "Weekly limit", percentage: 40 },
+      ],
+    });
+    const out = stripAnsi(formatSummary([s], ctx));
+    assert.match(out, /5h 1% · 7d 40%/);
+    const seg = stripAnsi(providerStatusSegment(s, ctx));
+    assert.match(seg, /5h 1% · 7d 40%/);
+  });
+
   it("includes the current model id when known", () => {
     const out = formatSummary([snap()], ctxWithModel);
     assert.match(out, /GLM\/glm-4\.7 \(zai\) — 5h 32% · MCP 18%/);

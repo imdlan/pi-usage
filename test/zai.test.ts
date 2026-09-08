@@ -146,6 +146,123 @@ describe("ZaiProvider - happy path", () => {
   });
 });
 
+describe("ZaiProvider - CREDIT_LIMIT windows", () => {
+  it("maps a 300-minute window (unit=3, number=5) to five_hour", async () => {
+    const provider = createZaiProvider({
+      resolveAuth: async () => AUTH,
+      now: () => FIXED,
+      fetchImpl: makeFetch((url) => {
+        if (url.includes("/quota/limit"))
+          return res(200, quotaBody([
+            { type: "CREDIT_LIMIT", unit: 3, number: 5, percentage: 32, nextResetTime: 1755234000000 },
+          ]));
+        return res(404, {});
+      }),
+    });
+    const snap = await provider.getUsage();
+    assert.deepEqual(snap.quotas.map((q) => q.id), ["five_hour"]);
+    assert.equal(snap.quotas[0]!.label, "5-hour quota");
+    assert.equal(snap.quotas[0]!.percentage, 32);
+    assert.equal(snap.quotas[0]!.resetAt, new Date(1755234000000).toISOString());
+  });
+
+  it("maps a 10080-minute window (unit=6, number=1) to weekly", async () => {
+    const provider = createZaiProvider({
+      resolveAuth: async () => AUTH,
+      now: () => FIXED,
+      fetchImpl: makeFetch((url) => {
+        if (url.includes("/quota/limit"))
+          return res(200, quotaBody([
+            { type: "CREDIT_LIMIT", unit: 6, number: 1, percentage: 55 },
+          ]));
+        return res(404, {});
+      }),
+    });
+    const snap = await provider.getUsage();
+    assert.deepEqual(snap.quotas.map((q) => q.id), ["weekly"]);
+    assert.equal(snap.quotas[0]!.label, "Weekly quota");
+  });
+
+  it("maps other durations to a generic labeled window row", async () => {
+    const provider = createZaiProvider({
+      resolveAuth: async () => AUTH,
+      now: () => FIXED,
+      fetchImpl: makeFetch((url) => {
+        if (url.includes("/quota/limit"))
+          return res(200, quotaBody([
+            { type: "CREDIT_LIMIT", unit: 1, number: 3, percentage: 12 },
+          ]));
+        return res(404, {});
+      }),
+    });
+    const snap = await provider.getUsage();
+    assert.deepEqual(snap.quotas.map((q) => q.id), ["window_3_day"]);
+    assert.equal(snap.quotas[0]!.label, "3 day window");
+    assert.equal(snap.quotas[0]!.percentage, 12);
+  });
+
+  it("fills used/limit/remaining columns when counts are present", async () => {
+    const provider = createZaiProvider({
+      resolveAuth: async () => AUTH,
+      now: () => FIXED,
+      fetchImpl: makeFetch((url) => {
+        if (url.includes("/quota/limit"))
+          return res(200, quotaBody([
+            { type: "CREDIT_LIMIT", unit: 3, number: 5, percentage: 40, usage: 5000, currentValue: 1800, remaining: 3200 },
+          ]));
+        return res(404, {});
+      }),
+    });
+    const snap = await provider.getUsage();
+    const q = snap.quotas[0]!;
+    // Percentage stays server-authoritative; counts fill the number columns
+    // and the detail table's bar renders from the percentage.
+    assert.equal(q.percentage, 40);
+    assert.equal(q.used, 1800);
+    assert.equal(q.limit, 5000);
+    assert.equal(q.remaining, 3200);
+  });
+
+  it("orders mixed CREDIT_LIMIT and TIME_LIMIT entries as 5h, weekly, MCP", async () => {
+    const provider = createZaiProvider({
+      resolveAuth: async () => AUTH,
+      now: () => FIXED,
+      fetchImpl: makeFetch((url) => {
+        if (url.includes("/quota/limit"))
+          return res(200, quotaBody([
+            { type: "CREDIT_LIMIT", unit: 6, number: 1, percentage: 55 },
+            { type: "TIME_LIMIT", percentage: 18, currentValue: 5000, usage: 28000 },
+            { type: "CREDIT_LIMIT", unit: 3, number: 5, percentage: 32 },
+          ]));
+        return res(404, {});
+      }),
+    });
+    const snap = await provider.getUsage();
+    assert.deepEqual(snap.quotas.map((q) => q.id), ["five_hour", "weekly", "monthly"]);
+  });
+
+  it("degrades malformed credit entries to the raw-type fallback without dropping others", async () => {
+    const provider = createZaiProvider({
+      resolveAuth: async () => AUTH,
+      now: () => FIXED,
+      fetchImpl: makeFetch((url) => {
+        if (url.includes("/quota/limit"))
+          return res(200, quotaBody([
+            { type: "CREDIT_LIMIT", unit: 3, number: 0, percentage: 32 },
+            { type: "CREDIT_LIMIT", unit: 9, number: 2, percentage: 10 },
+            { type: "CREDIT_LIMIT", unit: 6, number: 1, percentage: 55 },
+          ]));
+        return res(404, {});
+      }),
+    });
+    const snap = await provider.getUsage();
+    // number=0 falls back to the legacy convention (unit 3 -> five_hour);
+    // an unknown unit (9) falls back to the raw-type row; the healthy weekly
+    // entry still parses.
+    assert.deepEqual(snap.quotas.map((q) => q.id), ["five_hour", "weekly", "credit_limit"]);
+  });
+});
+
 describe("ZaiProvider - degraded parsing", () => {
   it("empty/missing limits -> no quotas, no error", async () => {
     const provider = createZaiProvider({

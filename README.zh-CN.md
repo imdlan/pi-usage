@@ -6,12 +6,13 @@
 
 一个 [Pi Coding Agent](https://github.com/earendil-works/pi-coding-agent) 扩展，在 Pi 内部显示 **AI 供应商用量与配额**。
 
-支持 **Z.ai / GLM Coding Plan**、**DeepSeek** 和 **OpenRouter**。仅在 Pi 中配置了对应供应商时才会出现；已配置但查询失败的仍会显示（标记 `error`/`stale`），未配置的完全隐藏。
+支持 **Z.ai / GLM Coding Plan**、**DeepSeek**、**OpenRouter** 和 **Kimi Coding Plan**（月之暗面）。仅在 Pi 中配置了对应供应商时才会出现；已配置但查询失败的仍会显示（标记 `error`/`stale`），未配置的完全隐藏。
 
 > **关于 API 稳定性的诚实说明**：本扩展会主动调用各供应商的用量查询接口。设计原则：**只用官方公开文档接口**，且**多供应商架构**——在 Pi 里配置了哪些供应商就显示哪些。
 >
 > - **DeepSeek**（`GET /user/balance`）与 **OpenRouter**（`GET /api/v1/key`、`GET /api/v1/credits`）为**官方公开文档接口**——稳定，但字段仍可能演进。
 > - **Z.ai** 接口（`model-usage`、`tool-usage`、`quota/limit`）**无官方文档**：参照官方 `glm-plan-usage` 插件推导，可能随时变更。
+> - **Kimi Coding Plan**（`GET /usages`）**无官方文档**：参照官方 [`kimi-code`](https://github.com/MoonshotAI/kimi-code) 客户端推导，可能随时变更。
 > - **暂不支持 OpenAI / Anthropic / Google Gemini**：同类插件查订阅额度用的是**无文档私有 API**（从官方 CLI 逆向而来），随时可能失效或被封——本项目刻意不承担此风险；而各家 admin 用量 API 又需要组织级 admin key（不会用作对话 provider 的 key）。
 >
 > 接口失效时优雅降级（`usage unavailable`），不影响模型请求。
@@ -19,6 +20,7 @@
 ```
 /usage
 GLM/glm-5.3 (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% 2026-08-27 09:43:00
+Kimi/kimi-for-coding (kimi) — 5h 1% 2026-08-15 13:59:07 · 7d 4% 2026-08-20 09:59:07
 
 /usage zai
 +-------------------+--------------+-----+--------------+-------+---------------------+
@@ -38,6 +40,19 @@ Models (* = current):
 
 status line（始终每 2 分钟自动刷新）
 GLM/glm-5.3 · 5h 32% · MCP 18%
+Kimi/kimi-for-coding · 5h 1% · 7d 4%
+
+/usage kimi
++---------------------+--------------+-----+-----------+------+---------------------+
+|                             Kimi/kimi-for-coding                                  |
+|                        refreshed 2026-08-15 09:43:00                              |
++---------------------+--------------+-----+-----------+------+---------------------+
+| Quota               | Usage        | Pct | Used      | Left | Resets              |
++---------------------+--------------+-----+-----------+------+---------------------+
+| 5-hour limit        | [#---------] |  1% | 1 / 100   | 99   | 2026-08-15 13:59:07 |
+| Weekly limit        | [####------] |  4% | 40 / 1000 | 960  | 2026-08-20 09:59:07 |
+| Monthly membership  | [----------] |  0% | —         | —    | —                   |
++---------------------+--------------+-----+-----------+------+---------------------+
 
 /usage pin（固定在编辑器上方的 widget，自动刷新）
 ┌─ pinned above the editor ──────────────────────────────────────────┐
@@ -58,6 +73,7 @@ pi install npm:@imdlan/pi-usage
 - **Z.ai / GLM Coding Plan** — base URL 指向官方 Z.ai / GLM 端点，API key 解析到你的 GLM Coding Plan token。
 - **DeepSeek** — base URL 指向 `https://api.deepseek.com`，普通 API key。
 - **OpenRouter** — base URL 指向 `https://openrouter.ai`，普通 `sk-or-v1-...` key。
+- **Kimi Coding Plan** — base URL 指向官方 Kimi coding 端点（`https://api.kimi.com/coding/v1` 或 `https://api.kimi.ai/coding/v1`），普通 `sk-kimi-...` key。代理/镜像 host 一律不查询。
 
 ## 命令
 
@@ -66,6 +82,7 @@ pi install npm:@imdlan/pi-usage
 | `/usage` | 所有供应商的用量摘要，含配额重置时间（本地时间）。 | ❌ 一次性快照 |
 | `/usage zai` | Z.ai 详细用量表：5 小时配额、MCP 月度配额（含分工具明细）、分模型用量。 | ❌ |
 | `/usage deepseek` | DeepSeek 按币种余额（CNY/USD），含赠送/充值明细。 | ❌ |
+| `/usage kimi` | Kimi Coding Plan 配额表：5 小时窗口、每周限额、月度会员冻结信号、可选加量包钱包。 | ❌ |
 | `/usage openrouter` | OpenRouter key 消费上限（已用/剩余/重置）+ 日/周/月花费 + 账户积分余额（USD）。 | ❌ |
 | `/usage refresh` | 强制从 API 拉取最新数据后渲染摘要。失败时保留最后一次有效快照。 | ❌ 仅渲染一次 |
 | `/usage status` | 状态栏内容、上次刷新时间、缓存状态。 | ❌ |
@@ -83,7 +100,7 @@ pi install npm:@imdlan/pi-usage
 
 - **只读**：仅查询用量。
 - **不接触密钥**：凭据通过 Pi 的 `getProviderAuth` 解析；绝不读取凭据文件或运行子进程。
-- **网络严格受限**：仅 HTTPS，host 白名单（`api.z.ai`、`open.bigmodel.cn`、`dev.bigmodel.cn`），拒绝重定向。
+- **网络严格受限**：仅 HTTPS，host 白名单（`api.z.ai`、`open.bigmodel.cn`、`dev.bigmodel.cn`、`api.kimi.com`、`api.kimi.ai`），拒绝重定向。
 - **无遥测**；输出全部脱敏。
 
 ## 开发
@@ -100,11 +117,16 @@ npm test            # node:test via tsx
 
 Z.ai 适配器参照官方 [`glm-plan-usage`](https://github.com/zai-org/zai-coding-plugins) 插件实现：端点从配置的 base URL origin 推导（`model-usage`、`tool-usage`、`quota/limit`）。解析逻辑隔离在 `src/providers/zai.ts`。
 
+`quota/limit` 的窗口条目同时包含旧版 `TOKENS_LIMIT` 与新版 `CREDIT_LIMIT`（credit 计费套餐）两种类型，均按 `unit × number` 窗口时长映射（300 分钟 → 5 小时窗口，10080 分钟 → 周窗口）。
+
+Kimi 适配器参照官方 [`kimi-code`](https://github.com/MoonshotAI/kimi-code) 客户端（`managed-usage.ts`）实现：`GET {baseUrl}/usages`，对其字符串数字、字段可缺省的响应做防御性解析。解析逻辑隔离在 `src/providers/kimi.ts`。
+
 ## 商标与免责声明
 
-- 本项目**与 Z.ai / 智谱、DeepSeek、OpenRouter 或任何其他供应商无隶属、无合作、未受其背书或赞助**。各供应商名称与商标归其所有者所有，仅用于指明所查询的服务（指明性合理使用）。
+- 本项目**与 Z.ai / 智谱、DeepSeek、OpenRouter、月之暗面（Kimi）或任何其他供应商无隶属、无合作、未受其背书或赞助**。各供应商名称与商标归其所有者所有，仅用于指明所查询的服务（指明性合理使用）。
 - 用量查询均为**只读**，使用 Pi 已持有的用户本人账号凭证，低频固定频率（每 2 分钟一次）。遵守各供应商服务条款是用户自身的责任。
 - Z.ai 适配器参照上游 [`glm-plan-usage`](https://github.com/zai-org/zai-coding-plugins) 插件（Apache-2.0，智谱）的端点行为实现，本仓库不包含任何上游代码。
+- Kimi 适配器参照上游 [`kimi-code`](https://github.com/MoonshotAI/kimi-code) 客户端的端点行为实现，本仓库不包含任何上游代码。
 
 ## 许可证
 

@@ -6,12 +6,13 @@
 
 A [Pi Coding Agent](https://github.com/earendil-works/pi-coding-agent) extension that shows **AI provider usage and quota** inside Pi.
 
-Supports **Z.ai / GLM Coding Plan**, **DeepSeek**, and **OpenRouter**. Each provider only appears when a matching one is configured in Pi. A configured provider whose query fails is still shown (marked `error`/`stale`); unconfigured ones are never rendered.
+Supports **Z.ai / GLM Coding Plan**, **DeepSeek**, **OpenRouter**, and **Kimi Coding Plan** (Moonshot AI). Each provider only appears when a matching one is configured in Pi. A configured provider whose query fails is still shown (marked `error`/`stale`); unconfigured ones are never rendered.
 
 > **Honesty about API stability**: this extension actively queries each provider's usage endpoints. Design principles: **officially documented APIs only**, and **multi-provider by design** — whichever providers you configure in Pi are the ones shown.
 >
 > - **DeepSeek** (`GET /user/balance`) and **OpenRouter** (`GET /api/v1/key`, `GET /api/v1/credits`) are **official documented APIs** — stable, but their fields may still evolve.
 > - **Z.ai** endpoints (`model-usage`, `tool-usage`, `quota/limit`) are **undocumented**: derived from the official `glm-plan-usage` plugin and may change without notice.
+> - **Kimi Coding Plan** (`GET /usages`) is **undocumented**: derived from the official [`kimi-code`](https://github.com/MoonshotAI/kimi-code) client and may change without notice.
 > - **OpenAI / Anthropic / Google Gemini are NOT supported**: subscription-quota endpoints used by some plugins are **undocumented private APIs** (reverse-engineered from official CLIs) that can break or be blocked at any time — that risk is deliberately not taken here. Their admin usage APIs, in turn, require organization admin keys that are never used as chat provider keys.
 >
 > If an endpoint breaks, the extension degrades gracefully (`usage unavailable`) and never affects model requests.
@@ -19,6 +20,7 @@ Supports **Z.ai / GLM Coding Plan**, **DeepSeek**, and **OpenRouter**. Each prov
 ```
 /usage
 GLM/glm-5.3 (zai) — 5h 32% 2026-08-15 11:43:00 · MCP 18% 2026-08-27 09:43:00
+Kimi/kimi-for-coding (kimi) — 5h 1% 2026-08-15 13:59:07 · 7d 4% 2026-08-20 09:59:07
 
 /usage zai
 +-------------------+--------------+-----+--------------+-------+---------------------+
@@ -38,6 +40,19 @@ Models (* = current):
 
 status line (always auto-refreshed every 2 min)
 GLM/glm-5.3 · 5h 32% · MCP 18%
+Kimi/kimi-for-coding · 5h 1% · 7d 4%
+
+/usage kimi
++---------------------+--------------+-----+-----------+------+---------------------+
+|                             Kimi/kimi-for-coding                                  |
+|                        refreshed 2026-08-15 09:43:00                              |
++---------------------+--------------+-----+-----------+------+---------------------+
+| Quota               | Usage        | Pct | Used      | Left | Resets              |
++---------------------+--------------+-----+-----------+------+---------------------+
+| 5-hour limit        | [#---------] |  1% | 1 / 100   | 99   | 2026-08-15 13:59:07 |
+| Weekly limit        | [####------] |  4% | 40 / 1000 | 960  | 2026-08-20 09:59:07 |
+| Monthly membership  | [----------] |  0% | —         | —    | —                   |
++---------------------+--------------+-----+-----------+------+---------------------+
 
 /usage pin (widget pinned above the editor, auto-refreshed)
 ┌─ pinned above the editor ──────────────────────────────────────────┐
@@ -58,6 +73,7 @@ Requires Node.js 20+ and at least one supported provider configured in Pi:
 - **Z.ai / GLM Coding Plan** — base URL at an official Z.ai / GLM endpoint, API key resolving to your GLM Coding Plan token.
 - **DeepSeek** — base URL at `https://api.deepseek.com`, standard API key.
 - **OpenRouter** — base URL at `https://openrouter.ai`, standard `sk-or-v1-...` key.
+- **Kimi Coding Plan** — base URL at the official Kimi coding endpoint (`https://api.kimi.com/coding/v1` or `https://api.kimi.ai/coding/v1`), standard `sk-kimi-...` key. Proxy or mirror hosts are never queried.
 
 ## Commands
 
@@ -66,6 +82,7 @@ Requires Node.js 20+ and at least one supported provider configured in Pi:
 | `/usage` | Usage summary for all providers, with quota reset times (local time). | ❌ One-time snapshot |
 | `/usage zai` | Detailed Z.ai usage table: 5-hour quota, MCP monthly quota with per-tool breakdown, per-model usage. | ❌ |
 | `/usage deepseek` | DeepSeek balance per currency (CNY/USD) with granted / topped-up breakdown. | ❌ |
+| `/usage kimi` | Kimi Coding Plan quota table: 5-hour window, weekly limit, monthly membership freeze signal, optional booster wallet. | ❌ |
 | `/usage openrouter` | OpenRouter key spend cap (used/remaining/reset) plus daily/weekly/monthly spend and account credits balance (USD). | ❌ |
 | `/usage refresh` | Force-refresh from the API, then render the summary. Keeps the last good snapshot on failure. | ❌ Renders once |
 | `/usage status` | Status line content, last refresh, cache state. | ❌ |
@@ -83,7 +100,7 @@ Wherever the provider name appears, the active model id is appended as `Name/mod
 
 - **Read-only**: only queries usage.
 - **No secrets handled**: auth resolves through Pi's `getProviderAuth`; never reads credential files or runs subprocesses.
-- **Locked-down networking**: HTTPS only, host allowlist (`api.z.ai`, `open.bigmodel.cn`, `dev.bigmodel.cn`), redirects rejected.
+- **Locked-down networking**: HTTPS only, host allowlist (`api.z.ai`, `open.bigmodel.cn`, `dev.bigmodel.cn`, `api.kimi.com`, `api.kimi.ai`), redirects rejected.
 - **No telemetry**; all output sanitized.
 
 ## Development
@@ -100,11 +117,16 @@ Adding a provider: implement `UsageProvider` in `src/providers/<name>.ts` (auth 
 
 The Z.ai adapter mirrors the official [`glm-plan-usage`](https://github.com/zai-org/zai-coding-plugins) plugin: endpoints derived from the configured base URL origin (`model-usage`, `tool-usage`, `quota/limit`). Parsing is isolated in `src/providers/zai.ts`.
 
+`quota/limit` window entries include both legacy `TOKENS_LIMIT` and newer `CREDIT_LIMIT` types (credit-billed plans); both are mapped by their `unit × number` window length (300 min → 5-hour, 10080 min → weekly).
+
+The Kimi adapter mirrors the official [`kimi-code`](https://github.com/MoonshotAI/kimi-code) client (`managed-usage.ts`): `GET {baseUrl}/usages` with defensive parsing of its string-number, optional-field response. Parsing is isolated in `src/providers/kimi.ts`.
+
 ## Trademarks & disclaimer
 
-- This project is **not affiliated with, endorsed by, or sponsored by** Z.ai / Zhipu AI, DeepSeek, OpenRouter, or any other provider. Provider names and trademarks belong to their respective owners and are used only to identify the services being queried (nominative fair use).
+- This project is **not affiliated with, endorsed by, or sponsored by** Z.ai / Zhipu AI, DeepSeek, OpenRouter, Moonshot AI (Kimi), or any other provider. Provider names and trademarks belong to their respective owners and are used only to identify the services being queried (nominative fair use).
 - Usage queries are made **read-only, with the credentials Pi already holds for the user's own account**, at a low fixed rate (every 2 minutes). It is the user's responsibility to comply with each provider's terms of service.
 - The Z.ai adapter references endpoint behavior of the upstream [`glm-plan-usage`](https://github.com/zai-org/zai-coding-plugins) plugin (Apache-2.0, Zhipu AI). No upstream code is included in this repository.
+- The Kimi adapter references endpoint behavior of the upstream [`kimi-code`](https://github.com/MoonshotAI/kimi-code) client. No upstream code is included in this repository.
 
 ## License
 
