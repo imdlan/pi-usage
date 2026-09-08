@@ -117,7 +117,7 @@ describe("KimiProvider - happy path", () => {
     assert.equal(membership.remaining, undefined);
   });
 
-  it("appends /usages to a trailing-slash base url unchanged", async () => {
+  it("derives the canonical usage URL from the origin (trailing-slash base url)", async () => {
     let seenUrl = "";
     const provider = createKimiProvider({
       resolveAuth: async () => ({ baseUrl: "https://api.kimi.ai/coding/v1/", apiKey: "sk-kimi-test" }),
@@ -129,6 +129,21 @@ describe("KimiProvider - happy path", () => {
     });
     await provider.getUsage();
     assert.equal(seenUrl, "https://api.kimi.ai/coding/v1/usages");
+  });
+
+  it("requests /coding/v1/usages when the configured base url lacks /v1 (Pi built-in kimi-coding entry)", async () => {
+    let seenUrl = "";
+    const provider = createKimiProvider({
+      resolveAuth: async () => ({ baseUrl: "https://api.kimi.com/coding", apiKey: "sk-kimi-test" }),
+      now: () => FIXED,
+      fetchImpl: makeFetch((url) => {
+        seenUrl = url;
+        return res(200, HEALTHY_BODY);
+      }),
+    });
+    const snap = await provider.getUsage();
+    assert.equal(snap.error, undefined);
+    assert.equal(seenUrl, "https://api.kimi.com/coding/v1/usages");
   });
 
   it("isAvailable resolves true for official hosts with auth", async () => {

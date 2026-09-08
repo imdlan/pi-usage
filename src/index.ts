@@ -147,6 +147,19 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
     return hosts.includes(host) ? currentModel.id : undefined;
   }
 
+  /** Resolve the usage provider id for the currently active model, if any.
+   * Inverse of `activeModelFor`: the status line and background refresh only
+   * query this provider. Returns undefined when no model is active or the
+   * active model maps to no supported usage provider (callers then fall back
+   * to rendering all configured providers). */
+  function activeProviderId(): string | undefined {
+    if (!registry || !currentModel) return undefined;
+    for (const id of registry.ids()) {
+      if (activeModelFor(id) !== undefined) return id;
+    }
+    return undefined;
+  }
+
   function fmtCtx(): FormatContext {
     return {
       nameOf: (id) => registry?.get(id)?.name ?? id,
@@ -200,7 +213,10 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
     const refresh = (): void => {
       if (!service || !statusLine) return;
       void (async () => {
-        await statusLine.update(service, { forceRefresh: true }).catch(() => undefined);
+        await statusLine.update(service, {
+          forceRefresh: true,
+          activeId: activeProviderId(),
+        }).catch(() => undefined);
         // Keep the pinned widget in sync from the freshly written cache.
         if (pinned) {
           const snaps = await collectCached().catch(() => []);
@@ -274,7 +290,7 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
     };
     if (!service || !statusLine) return;
     void (async () => {
-      await statusLine.update(service).catch(() => undefined);
+      await statusLine.update(service, { activeId: activeProviderId() }).catch(() => undefined);
       if (pinned) {
         const snaps = await collectCached().catch(() => []);
         if (pinned && snaps.length > 0) {
@@ -305,7 +321,9 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
           case "refresh": {
             if (!service || !statusLine) return;
             const snaps = await service.refreshAll({ forceRefresh: true });
-            void statusLine.update(service, { forceRefresh: true }).catch(() => undefined);
+            void statusLine
+              .update(service, { forceRefresh: true, activeId: activeProviderId() })
+              .catch(() => undefined);
             renderWidget(() => formatSummary(snaps, fmtCtx()));
             return;
           }

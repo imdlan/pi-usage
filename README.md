@@ -40,7 +40,13 @@ Models (* = current):
 
 status line (always auto-refreshed every 2 min)
 GLM/glm-5.3 · 5h 32% · MCP 18%
-Kimi/kimi-for-coding · 5h 1% · 7d 4%
+
+The status line and the background refresh follow the **active model**: only
+its provider is queried and rendered — other configured providers are not
+polled. When the active model maps to no supported usage provider (e.g.
+Anthropic), the status line falls back to showing all configured providers.
+`/usage` views (summary, pin widget, `refresh`) still cover every configured
+provider.
 
 /usage kimi
 +---------------------+--------------+-----+-----------+------+---------------------+

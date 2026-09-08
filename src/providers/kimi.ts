@@ -4,10 +4,14 @@
 /**
  * Kimi Coding Plan usage provider (Moonshot AI, subscription coding plan).
  *
- * Queries `GET {baseUrl}/usages` where baseUrl is the configured Kimi coding
- * endpoint (e.g. `https://api.kimi.com/coding/v1`). The endpoint is NOT
- * officially documented; its behavior mirrors the official `kimi-code`
- * client (MoonshotAI/kimi-code, packages/oauth/src/managed-usage.ts):
+ * Queries the canonical usage endpoint `GET https://{host}/coding/v1/usages`
+ * for the configured Kimi coding host. The configured baseUrl's path is NOT
+ * trusted: Pi's built-in `kimi-coding` entry uses `https://api.kimi.com/coding`
+ * (no `/v1`), and naive `${baseUrl}/usages` appending 404s. The host allowlist
+ * already pins the origin to the two official deployments, so the canonical
+ * path is fixed — mirroring the official `kimi-code` client
+ * (MoonshotAI/kimi-code, packages/oauth/src/managed-usage.ts,
+ * `DEFAULT_KIMI_CODE_BASE_URL` + `kimiCodeUsageUrl()`):
  *   - `usage` is the weekly plan quota (`resetTime`, numbers as decimal strings).
    - `limits[]` are sliding windows; a 300 `TIME_UNIT_MINUTE` window is the
  *     5-hour quota. Sub-day minute windows fold to whole hours.
@@ -46,9 +50,9 @@ import type {
  * mirrors are NOT the managed endpoint and fail closed. */
 export const KIMI_ALLOWED_HOSTS = ["api.kimi.com", "api.kimi.ai"] as const;
 
-/** Usage API path appended to the configured base URL (official clients
- * build the usage URL the same way: `${base}/usages`). */
-const KIMI_USAGES_SUFFIX = "/usages";
+/** Canonical usage endpoint path on the official Kimi coding hosts. Mirrors
+ * the official client (`${base}/usages` with base fixed to `/coding/v1`). */
+const KIMI_USAGES_PATH = "/coding/v1/usages";
 
 export interface KimiProviderDeps {
   /** Resolves Kimi auth through Pi's authorized `getProviderAuth`. */
@@ -335,18 +339,19 @@ export function createKimiProvider(deps: KimiProviderDeps): UsageProvider {
         toUsageError(UsageErrorCode.Allowlist, "Kimi base url host not allowed"),
       );
     }
-    let base: string;
+    let origin: string;
     try {
-      // Usage URL is `{baseUrl}/usages` (official client semantics): the
-      // configured base must be the full coding endpoint, e.g.
-      // `https://api.kimi.com/coding/v1` -> `.../coding/v1/usages`.
-      base = `${new URL(auth.baseUrl).toString().replace(/\/+$/, "")}`;
+      // Usage URL = origin + canonical path. Only the origin comes from the
+      // configured baseUrl (host is allowlist-checked above); the path is
+      // fixed to `/coding/v1/usages` because configured baseUrls vary
+      // (`/coding`, `/coding/v1`, …) and appending `/usages` to them 404s.
+      origin = new URL(auth.baseUrl).origin;
     } catch {
       return buildSnapshot(now, [], toUsageError(UsageErrorCode.UnsafeUrl, "invalid Kimi base url"));
     }
 
     const res = await controlledGetJson({
-      url: `${base}${KIMI_USAGES_SUFFIX}`,
+      url: `${origin}${KIMI_USAGES_PATH}`,
       headers: { Authorization: `Bearer ${auth.apiKey}`, Accept: "application/json" },
       allowlist: KIMI_ALLOWED_HOSTS as readonly string[],
       timeoutMs,

@@ -23,7 +23,7 @@ Kimi Coding Plan 的用量端点 `GET {baseUrl}/usages` 未官方文档化，但
 
 1. **以官方 `kimi-code` 的 `managed-usage.ts` 为唯一参照**（而非 kimi-cli 或社区实现）。理由：与 Z.ai 适配器引用 `glm-plan-usage` 的既有先例完全同构——厂商自家开源客户端最能代表当前真实形态；kimi-cli 的解析注释显示其文档形态（`reset_at`、`"MINUTE"`）落后于实测（`resetTime`、`TIME_UNIT_MINUTE`）。替代方案（kimi-cli 为准）被否：形态陈旧且为 Python 惯用写法。
 
-2. **URL 采用追加式 `{baseUrl}/usages`**，而非 Z.ai 式的 origin + 绝对路径。理由：官方 `kimiCodeUsageUrl()` 即 `${base}/usages`，Pi 中 Kimi provider 的 baseUrl 天然含 `/coding/v1` 路径段；追加式对未来路径版本化更稳。前提约束：baseUrl 必须是完整 coding 端点——已在 spec 的发现场景中表达（host 匹配 + 官方端点配置）。
+2. **URL 采用 canonical path（origin + `/coding/v1/usages`）**。原决策为追加式 `{baseUrl}/usages`，其前提"Pi 中 Kimi provider 的 baseUrl 天然含 `/coding/v1` 路径段"后被实测证伪：Pi 内置 `kimi-coding` 条目的 baseUrl 是 `https://api.kimi.com/coding`（无 `/v1`），追加式得到 `/coding/usages` → 404（官方客户端对该状态码的提示即 "Usage endpoint not available"）。修正：仅从配置的 baseUrl 取 origin（host 已被 allowlist 锁定），路径固定为官方客户端的 canonical 形态——与 `kimiCodeUsageUrl()` 的 `${base}/usages`（base 恒为 `/coding/v1`）语义一致。
 
 3. **Allowlist 锁死 `api.kimi.com` / `api.kimi.ai`**。官方客户端对"受管端点"的判定（`isManagedKimiCodeBaseUrl`）同样排除代理/网关/镜像——对非官方 host 的 `/usages` schema 无法信任，fail-closed 与全扩展安全基线一致。
 

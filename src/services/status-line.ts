@@ -24,10 +24,24 @@ export class StatusLineService {
     this.ctx = ctx;
   }
 
-  /** Refresh providers and write the status line. Never throws. */
-  async update(service: UsageService, options?: { forceRefresh?: boolean }): Promise<void> {
+  /**
+   * Refresh providers and write the status line. Never throws.
+   *
+   * When `options.activeId` is given, only that provider is refreshed and
+   * rendered — the status line follows the currently active model instead of
+   * querying every configured provider. When omitted, all available providers
+   * are refreshed and rendered (fallback for active models that do not map to
+   * any supported usage provider).
+   */
+  async update(
+    service: UsageService,
+    options?: { forceRefresh?: boolean; activeId?: string },
+  ): Promise<void> {
     try {
-      const snaps = await service.refreshAll({ forceRefresh: options?.forceRefresh });
+      const snaps =
+        options?.activeId !== undefined
+          ? [await service.getUsage(options.activeId, { forceRefresh: options?.forceRefresh })]
+          : await service.refreshAll({ forceRefresh: options?.forceRefresh });
       this.sink.setStatus("pi-usage", formatStatusLine(snaps, this.ctx));
     } catch {
       this.sink.setStatus("pi-usage", "usage unavailable");
