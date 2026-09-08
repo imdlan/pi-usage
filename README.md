@@ -6,13 +6,14 @@
 
 An extension for [Pi](https://pi.dev/) — a minimal agent harness — that shows **AI provider usage and quota** inside Pi.
 
-Supports **Z.ai / GLM Coding Plan**, **Kimi Coding Plan**, **DeepSeek**, and **OpenRouter**. Each provider only appears when a matching one is configured in Pi. A configured provider whose query fails is still shown (marked `error`/`stale`); unconfigured ones are never rendered.
+Supports **Z.ai / GLM Coding Plan**, **Kimi Coding Plan**, **DeepSeek**, **OpenRouter**, and **OpenCode Go**. Each provider only appears when a matching one is configured in Pi. A configured provider whose query fails is still shown (marked `error`/`stale`); unconfigured ones are never rendered.
 
 > **Honesty about API stability**: this extension actively queries each provider's usage endpoints. Design principles: **officially documented APIs only**, and **multi-provider by design** — whichever providers you configure in Pi are the ones shown.
 >
 > - **DeepSeek** (`GET /user/balance`) and **OpenRouter** (`GET /api/v1/key`, `GET /api/v1/credits`) are **official documented APIs** — stable, but their fields may still evolve.
 > - **Z.ai** endpoints (`model-usage`, `tool-usage`, `quota/limit`) are **undocumented**: derived from the official `glm-plan-usage` plugin and may change without notice.
 > - **Kimi** endpoint (`GET /coding/v1/usages`) is **undocumented**: it is the same endpoint the official Kimi Code CLI's built-in `/usage` command queries, and may change without notice.
+> - **OpenCode Go** usage endpoint (`GET /zen/go/v1/usage`) is **undocumented**: it reuses the same API key as the documented Go endpoints (`/zen/go/v1/chat/completions`, `/zen/go/v1/responses`; see [docs](https://opencode.ai/docs/go/)) and may change without notice.
 > - **OpenAI / Anthropic / Google Gemini are NOT supported**: subscription-quota endpoints used by some plugins are **undocumented private APIs** (reverse-engineered from official CLIs) that can break or be blocked at any time — that risk is deliberately not taken here. Their admin usage APIs, in turn, require organization admin keys that are never used as chat provider keys.
 >
 > If an endpoint breaks, the extension degrades gracefully (`usage unavailable`) and never affects model requests.
@@ -62,6 +63,7 @@ Requires Node.js 20+ and at least one supported provider configured in Pi:
 - **Kimi Coding Plan** — the built-in `kimi-coding` provider at `https://api.kimi.com/coding`, authenticated via `/login kimi-coding` (OAuth) or a Kimi Code Console API key (`KIMI_API_KEY`).
 - **DeepSeek** — base URL at `https://api.deepseek.com`, standard API key.
 - **OpenRouter** — base URL at `https://openrouter.ai`, standard `sk-or-v1-...` key.
+- **OpenCode Go** — a custom provider with base URL `https://opencode.ai/zen/go/v1`, using your Go API key from the [console](https://opencode.ai/auth).
 
 ## Commands
 
@@ -72,6 +74,7 @@ Requires Node.js 20+ and at least one supported provider configured in Pi:
 | `/usage kimi` | Detailed Kimi Coding Plan usage table: 5-hour quota and weekly (7-day rolling) quota with reset times. | ❌ |
 | `/usage deepseek` | DeepSeek balance per currency (CNY/USD) with granted / topped-up breakdown. | ❌ |
 | `/usage openrouter` | OpenRouter key spend cap (used/remaining/reset) plus daily/weekly/monthly spend and account credits balance (USD). | ❌ |
+| `/usage opencode` | OpenCode Go usage table: rolling 5-hour, weekly, and monthly quotas as percentages with reset times. | ❌ |
 | `/usage refresh` | Force-refresh from the API, then render the summary. Keeps the last good snapshot on failure. | ❌ Renders once |
 | `/usage status` | Status line content, last refresh, cache state. | ❌ |
 | `/usage pin` | Pin the summary widget above the editor. `pin on` / `pin off` set it explicitly; `pin` toggles. | ✅ Every ~2 min |
@@ -88,7 +91,7 @@ Wherever the provider name appears, the active model id is appended as `Name/mod
 
 - **Read-only**: only queries usage.
 - **No secrets handled**: auth resolves through Pi's `getProviderAuth`; never reads credential files or runs subprocesses.
-- **Locked-down networking**: HTTPS only, host allowlist (`api.z.ai`, `open.bigmodel.cn`, `dev.bigmodel.cn`, `api.kimi.com`), redirects rejected.
+- **Locked-down networking**: HTTPS only, host allowlist (`api.z.ai`, `open.bigmodel.cn`, `dev.bigmodel.cn`, `api.kimi.com`, `opencode.ai`), redirects rejected.
 - **No telemetry**; all output sanitized.
 
 ## Development
@@ -107,9 +110,11 @@ The Z.ai adapter mirrors the official [`glm-plan-usage`](https://github.com/zai-
 
 The Kimi adapter queries `GET /coding/v1/usages` — the endpoint behind the official Kimi Code CLI's built-in `/usage` command. Parsing is isolated in `src/providers/kimi.ts`.
 
+The OpenCode Go adapter queries `GET /zen/go/v1/usage` and reports the `rolling` / `weekly` / `monthly` windows as percentages; the documented base limits ($12 / $30 / $60) vary by model, so no dollar amounts are shown. Parsing is isolated in `src/providers/opencode.ts`.
+
 ## Trademarks & disclaimer
 
-- This project is **not affiliated with, endorsed by, or sponsored by** Z.ai / Zhipu AI, Moonshot AI / Kimi, DeepSeek, OpenRouter, or any other provider. Provider names and trademarks belong to their respective owners and are used only to identify the services being queried (nominative fair use).
+- This project is **not affiliated with, endorsed by, or sponsored by** Z.ai / Zhipu AI, Moonshot AI / Kimi, DeepSeek, OpenRouter, OpenCode, or any other provider. Provider names and trademarks belong to their respective owners and are used only to identify the services being queried (nominative fair use).
 - Usage queries are made **read-only, with the credentials Pi already holds for the user's own account**, at a low fixed rate (every 2 minutes). It is the user's responsibility to comply with each provider's terms of service.
 - The Z.ai adapter references endpoint behavior of the upstream [`glm-plan-usage`](https://github.com/zai-org/zai-coding-plugins) plugin (Apache-2.0, Zhipu AI). No upstream code is included in this repository.
 

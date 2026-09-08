@@ -6,13 +6,14 @@
 
 为 [Pi](https://pi.dev/)（极简 agent harness）编写的扩展，在 Pi 内部显示 **AI 供应商用量与配额**。
 
-支持 **Z.ai / GLM Coding Plan**、**Kimi Coding Plan**、**DeepSeek** 和 **OpenRouter**。仅在 Pi 中配置了对应供应商时才会出现；已配置但查询失败的仍会显示（标记 `error`/`stale`），未配置的完全隐藏。
+支持 **Z.ai / GLM Coding Plan**、**Kimi Coding Plan**、**DeepSeek**、**OpenRouter** 和 **OpenCode Go**。仅在 Pi 中配置了对应供应商时才会出现；已配置但查询失败的仍会显示（标记 `error`/`stale`），未配置的完全隐藏。
 
 > **关于 API 稳定性的诚实说明**：本扩展会主动调用各供应商的用量查询接口。设计原则：**只用官方公开文档接口**，且**多供应商架构**——在 Pi 里配置了哪些供应商就显示哪些。
 >
 > - **DeepSeek**（`GET /user/balance`）与 **OpenRouter**（`GET /api/v1/key`、`GET /api/v1/credits`）为**官方公开文档接口**——稳定，但字段仍可能演进。
 > - **Z.ai** 接口（`model-usage`、`tool-usage`、`quota/limit`）**无官方文档**：参照官方 `glm-plan-usage` 插件推导，可能随时变更。
 > - **Kimi** 接口（`GET /coding/v1/usages`）**无官方文档**：与官方 Kimi Code CLI 内置 `/usage` 命令查询的是同一端点，可能随时变更。
+> - **OpenCode Go** 用量接口（`GET /zen/go/v1/usage`）**无官方文档**：复用已公开文档的 Go 接口（`/zen/go/v1/chat/completions`、`/zen/go/v1/responses`，见[文档](https://opencode.ai/docs/go/)）的同一 API key，可能随时变更。
 > - **暂不支持 OpenAI / Anthropic / Google Gemini**：同类插件查订阅额度用的是**无文档私有 API**（从官方 CLI 逆向而来），随时可能失效或被封——本项目刻意不承担此风险；而各家 admin 用量 API 又需要组织级 admin key（不会用作对话 provider 的 key）。
 >
 > 接口失效时优雅降级（`usage unavailable`），不影响模型请求。
@@ -62,6 +63,7 @@ pi install npm:@imdlan/pi-usage
 - **Kimi Coding Plan** — 使用内置 `kimi-coding` provider（`https://api.kimi.com/coding`），通过 `/login kimi-coding`（OAuth）或 Kimi Code Console 的 API key（`KIMI_API_KEY`）认证。
 - **DeepSeek** — base URL 指向 `https://api.deepseek.com`，普通 API key。
 - **OpenRouter** — base URL 指向 `https://openrouter.ai`，普通 `sk-or-v1-...` key。
+- **OpenCode Go** — 自定义 provider，base URL 指向 `https://opencode.ai/zen/go/v1`，使用[控制台](https://opencode.ai/auth)获取的 Go API key。
 
 ## 命令
 
@@ -72,6 +74,7 @@ pi install npm:@imdlan/pi-usage
 | `/usage kimi` | Kimi Coding Plan 详细用量表：5 小时配额与周配额（7 天滚动），含重置时间。 | ❌ |
 | `/usage deepseek` | DeepSeek 按币种余额（CNY/USD），含赠送/充值明细。 | ❌ |
 | `/usage openrouter` | OpenRouter key 消费上限（已用/剩余/重置）+ 日/周/月花费 + 账户积分余额（USD）。 | ❌ |
+| `/usage opencode` | OpenCode Go 用量表：滚动 5 小时、周、月配额的百分比，含重置时间。 | ❌ |
 | `/usage refresh` | 强制从 API 拉取最新数据后渲染摘要。失败时保留最后一次有效快照。 | ❌ 仅渲染一次 |
 | `/usage status` | 状态栏内容、上次刷新时间、缓存状态。 | ❌ |
 | `/usage pin` | 将摘要 widget 固定在编辑器上方。`pin on` / `pin off` 显式设置；`pin` 切换。 | ✅ 约每 2 分钟 |
@@ -88,7 +91,7 @@ pi install npm:@imdlan/pi-usage
 
 - **只读**：仅查询用量。
 - **不接触密钥**：凭据通过 Pi 的 `getProviderAuth` 解析；绝不读取凭据文件或运行子进程。
-- **网络严格受限**：仅 HTTPS，host 白名单（`api.z.ai`、`open.bigmodel.cn`、`dev.bigmodel.cn`、`api.kimi.com`），拒绝重定向。
+- **网络严格受限**：仅 HTTPS，host 白名单（`api.z.ai`、`open.bigmodel.cn`、`dev.bigmodel.cn`、`api.kimi.com`、`opencode.ai`），拒绝重定向。
 - **无遥测**；输出全部脱敏。
 
 ## 开发
@@ -107,9 +110,11 @@ Z.ai 适配器参照官方 [`glm-plan-usage`](https://github.com/zai-org/zai-cod
 
 Kimi 适配器查询 `GET /coding/v1/usages` —— 即官方 Kimi Code CLI 内置 `/usage` 命令背后的端点。解析逻辑隔离在 `src/providers/kimi.ts`。
 
+OpenCode Go 适配器查询 `GET /zen/go/v1/usage`，以百分比展示 `rolling` / `weekly` / `monthly` 三个窗口；公开文档的基础限额（$12 / $30 / $60）随模型不同而变化，故不展示美元金额。解析逻辑隔离在 `src/providers/opencode.ts`。
+
 ## 商标与免责声明
 
-- 本项目**与 Z.ai / 智谱、Moonshot AI / Kimi、DeepSeek、OpenRouter 或任何其他供应商无隶属、无合作、未受其背书或赞助**。各供应商名称与商标归其所有者所有，仅用于指明所查询的服务（指明性合理使用）。
+- 本项目**与 Z.ai / 智谱、Moonshot AI / Kimi、DeepSeek、OpenRouter、OpenCode 或任何其他供应商无隶属、无合作、未受其背书或赞助**。各供应商名称与商标归其所有者所有，仅用于指明所查询的服务（指明性合理使用）。
 - 用量查询均为**只读**，使用 Pi 已持有的用户本人账号凭证，低频固定频率（每 2 分钟一次）。遵守各供应商服务条款是用户自身的责任。
 - Z.ai 适配器参照上游 [`glm-plan-usage`](https://github.com/zai-org/zai-coding-plugins) 插件（Apache-2.0，智谱）的端点行为实现，本仓库不包含任何上游代码。
 

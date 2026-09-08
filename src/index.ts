@@ -21,6 +21,7 @@ import { formatProviderDetail, formatStatus, formatSummary } from "./formatters/
 import type { FormatContext } from "./formatters/usage.js";
 import { createDeepSeekProvider, DEEPSEEK_ALLOWED_HOSTS } from "./providers/deepseek.js";
 import { createKimiProvider, KIMI_ALLOWED_HOSTS } from "./providers/kimi.js";
+import { createOpenCodeProvider, OPENCODE_ALLOWED_HOSTS } from "./providers/opencode.js";
 import { createOpenRouterProvider, OPENROUTER_ALLOWED_HOSTS } from "./providers/openrouter.js";
 import { ProviderRegistry } from "./providers/registry.js";
 import type { ProviderAuth, UsageSnapshot } from "./providers/types.js";
@@ -37,6 +38,7 @@ const PROVIDER_HOSTS: Readonly<Record<string, readonly string[]>> = {
   deepseek: DEEPSEEK_ALLOWED_HOSTS,
   kimi: KIMI_ALLOWED_HOSTS,
   openrouter: OPENROUTER_ALLOWED_HOSTS,
+  opencode: OPENCODE_ALLOWED_HOSTS,
 };
 
 /**
@@ -237,6 +239,9 @@ export default function piUsageExtension(pi: ExtensionAPI): void {
     );
     registry.register(
       createOpenRouterProvider({ resolveAuth: createHostAuthResolver(ctx, OPENROUTER_ALLOWED_HOSTS) }),
+    );
+    registry.register(
+      createOpenCodeProvider({ resolveAuth: createHostAuthResolver(ctx, OPENCODE_ALLOWED_HOSTS) }),
     );
     service = new UsageService({ registry });
     statusLine = new StatusLineService(
